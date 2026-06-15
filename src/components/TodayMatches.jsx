@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { fetchMatchesByDate } from "../data/api";
 import { teamFacts } from "../data/teamFacts";
+import { useTeamNav } from "../context/TeamNav";
 
 function localTime(isoDate) {
   if (!isoDate) return "";
@@ -10,9 +11,13 @@ function localTime(isoDate) {
 function TeamBlock({ team }) {
   const rank = teamFacts[team.abbreviation]?.fifaRank;
   const bgColor = team.color ? `#${team.color}` : "#1e3a5f";
+  const { navigateToTeam } = useTeamNav();
 
   return (
-    <div className="flex flex-col items-center w-5/12">
+    <button
+      onClick={() => navigateToTeam({ id: team.id, displayName: team.name, abbreviation: team.abbreviation, logo: team.logo })}
+      className="flex flex-col items-center w-5/12 active:scale-95 transition-transform"
+    >
       <div
         className="w-14 h-14 rounded-full flex items-center justify-center mb-1 overflow-hidden"
         style={{ backgroundColor: bgColor }}
@@ -24,7 +29,7 @@ function TeamBlock({ team }) {
       </div>
       <span className="text-sm font-semibold text-center leading-tight">{team.name}</span>
       {rank && <span className="text-xs text-yellow-400/80 mt-0.5">#{rank} FIFA</span>}
-    </div>
+    </button>
   );
 }
 

@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { fetchGroupsForBracket, computeBest3rd } from "../data/api";
+import { useTeamNav } from "../context/TeamNav";
 
 function GroupTable({ group, best3rdIds }) {
+  const { navigateToTeam } = useTeamNav();
   return (
     <div className="bg-white/10 backdrop-blur rounded-2xl mb-4 overflow-hidden border border-white/10">
       <div className="bg-yellow-400/20 px-4 py-2 border-b border-white/10">
@@ -32,7 +34,10 @@ function GroupTable({ group, best3rdIds }) {
             return (
               <tr key={team.id ?? i} className={`border-t border-white/5 ${rowBg}`}>
                 <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => navigateToTeam({ id: team.id, displayName: team.name, abbreviation: team.abbreviation, logo: team.logo })}
+                    className="flex items-center gap-2 hover:opacity-70 transition-opacity text-left"
+                  >
                     {team.logo ? (
                       <img src={team.logo} alt={team.name} className="w-6 h-6 object-contain" />
                     ) : (
@@ -42,7 +47,7 @@ function GroupTable({ group, best3rdIds }) {
                     {isQualified3rd && (
                       <span className="text-[10px] text-amber-400 font-semibold ml-1">★3rd</span>
                     )}
-                  </div>
+                  </button>
                 </td>
                 <td className="text-center px-1 py-2.5 text-white/70">{team.played}</td>
                 <td className="text-center px-1 py-2.5 text-white/70">{team.wins}</td>

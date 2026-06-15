@@ -1,6 +1,148 @@
 import { useState, useEffect } from "react";
-import { fetchTeams } from "../data/api";
+import { fetchTeams, fetchTeamSchedule } from "../data/api";
 import { teamFacts } from "../data/teamFacts";
+import { useTeamNav } from "../context/TeamNav";
+
+function localTime(isoDate) {
+  if (!isoDate) return "";
+  return new Date(isoDate).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function matchPreview(myAbbr, opponent) {
+  const myRank = teamFacts[myAbbr]?.fifaRank;
+  const oppRank = teamFacts[opponent?.abbreviation]?.fifaRank;
+  if (myRank && oppRank) {
+    if (myRank < oppRank) return `${myAbbr} enter as favorites (#${myRank} FIFA vs #${oppRank}).`;
+    if (oppRank < myRank) return `${opponent.abbreviation} are the higher-ranked side (#${oppRank} vs #${myRank}).`;
+    return `Closely matched — both ranked around #${myRank} by FIFA.`;
+  }
+  return "";
+}
+
+function ScheduleSection({ team }) {
+  const [matches, setMatches] = useState(null);
+  const [error, setError] = useState(null);
+  const { navigateToTeam } = useTeamNav();
+
+  useEffect(() => {
+    if (!team.id) return;
+    fetchTeamSchedule(team.id)
+      .then(setMatches)
+      .catch(e => setError(e.message));
+  }, [team.id]);
+
+  if (error) return (
+    <div className="text-xs text-white/30 text-center py-3">Match schedule unavailable</div>
+  );
+  if (!matches) return (
+    <div className="text-xs text-white/40 text-center py-4 animate-pulse">Loading matches...</div>
+  );
+
+  const past = matches.filter(m => m.statusState === "post");
+  const live = matches.filter(m => m.statusState === "in");
+  const upcoming = matches.filter(m => m.statusState === "pre");
+
+  function OpponentRow({ match, isHome }) {
+    const me = isHome ? match.home : match.away;
+    const opp = isHome ? match.away : match.home;
+    const myScore = parseInt(me.score ?? 0);
+    const oppScore = parseInt(opp.score ?? 0);
+    const won = me.winner;
+    const drew = !me.winner && !opp.winner;
+    const resultColor = won ? "text-emerald-400" : drew ? "text-white/60" : "text-red-400";
+    const resultLabel = won ? "W" : drew ? "D" : "L";
+
+    return (
+      <div className="flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
+        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${won ? "bg-emerald-400/20 text-emerald-400" : drew ? "bg-white/10 text-white/60" : "bg-red-400/20 text-red-400"}`}>
+          {resultLabel}
+        </div>
+        <button
+          onClick={() => navigateToTeam({ id: opp.id, displayName: opp.name, abbreviation: opp.abbreviation, logo: opp.logo })}
+          className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-70 transition-opacity"
+        >
+          {opp.logo
+            ? <img src={opp.logo} alt={opp.name} className="w-5 h-5 object-contain flex-shrink-0" />
+            : <div className="w-5 h-5 bg-white/10 rounded-full flex-shrink-0" />}
+          <span className="text-sm truncate text-white/80">{opp.name}</span>
+        </button>
+        <span className={`text-sm font-bold flex-shrink-0 ${resultColor}`}>
+          {myScore}–{oppScore}
+        </span>
+      </div>
+    );
+  }
+
+  function UpcomingRow({ match }) {
+    const isHome = match.home.id === team.id;
+    const opp = isHome ? match.away : match.home;
+    const preview = matchPreview(team.abbreviation, opp);
+
+    return (
+      <div className="py-3 border-b border-white/5 last:border-0">
+        <div className="flex items-center gap-3 mb-1.5">
+          <button
+            onClick={() => navigateToTeam({ id: opp.id, displayName: opp.name, abbreviation: opp.abbreviation, logo: opp.logo })}
+            className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-70 transition-opacity"
+          >
+            {opp.logo
+              ? <img src={opp.logo} alt={opp.name} className="w-5 h-5 object-contain flex-shrink-0" />
+              : <div className="w-5 h-5 bg-white/10 rounded-full flex-shrink-0" />}
+            <span className="text-sm font-semibold text-white">{opp.name}</span>
+          </button>
+          <span className="text-xs text-white/40 flex-shrink-0">{localTime(match.isoDate)}</span>
+        </div>
+        {match.note && <div className="text-xs text-yellow-400/70 mb-1">{match.note}</div>}
+        {preview && <div className="text-xs text-white/50 leading-snug">{preview}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 mt-5">
+      {live.length > 0 && (
+        <div>
+          <div className="text-xs text-red-400 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse inline-block" /> Live Now
+          </div>
+          <div className="bg-white/5 rounded-xl px-3">
+            {live.map(m => {
+              const isHome = m.home.id === team.id;
+              return <OpponentRow key={m.id} match={m} isHome={isHome} />;
+            })}
+          </div>
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <div>
+          <div className="text-xs text-white/40 font-semibold uppercase tracking-wider mb-2">Past Results</div>
+          <div className="bg-white/5 rounded-xl px-3">
+            {past.slice(-5).map(m => {
+              const isHome = m.home.id === team.id;
+              return <OpponentRow key={m.id} match={m} isHome={isHome} />;
+            })}
+          </div>
+        </div>
+      )}
+
+      {upcoming.length > 0 && (
+        <div>
+          <div className="text-xs text-white/40 font-semibold uppercase tracking-wider mb-2">Upcoming</div>
+          <div className="bg-white/5 rounded-xl px-3">
+            {upcoming.slice(0, 3).map(m => (
+              <UpcomingRow key={m.id} match={m} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {past.length === 0 && upcoming.length === 0 && live.length === 0 && (
+        <div className="text-xs text-white/30 text-center py-2">No matches found yet</div>
+      )}
+    </div>
+  );
+}
 
 function TeamCard({ team, onClick }) {
   const extra = teamFacts[team.abbreviation] ?? {};
@@ -26,6 +168,7 @@ function TeamCard({ team, onClick }) {
             <div className="text-xs text-white/40">FIFA Rank</div>
           </div>
         )}
+        <span className="text-white/30 ml-1">›</span>
       </div>
     </button>
   );
@@ -41,22 +184,21 @@ function TeamDetail({ team, onBack }) {
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-2 text-white/60 hover:text-white mb-4 transition-colors">
-        ← Back to teams
+      <button onClick={onBack} className="flex items-center gap-2 text-white/60 hover:text-white mb-4 transition-colors text-sm">
+        ← All Teams
       </button>
 
-      <div className="bg-white/10 backdrop-blur rounded-2xl p-6 border border-white/10">
-        <div className="text-center mb-6">
+      <div className="bg-white/10 backdrop-blur rounded-2xl p-5 border border-white/10">
+        <div className="text-center mb-5">
           {logo
-            ? <img src={logo} alt={team.displayName} className="w-24 h-24 object-contain mx-auto mb-3" />
-            : <div className="w-24 h-24 bg-white/10 rounded-full mx-auto mb-3 flex items-center justify-center text-2xl font-bold">{team.abbreviation}</div>
+            ? <img src={logo} alt={team.displayName} className="w-20 h-20 object-contain mx-auto mb-3" />
+            : <div className="w-20 h-20 bg-white/10 rounded-full mx-auto mb-3 flex items-center justify-center text-2xl font-bold">{team.abbreviation}</div>
           }
           <h2 className="text-2xl font-bold">{team.displayName ?? team.name}</h2>
-          <div className="text-white/50 text-sm mt-1">{team.abbreviation}</div>
         </div>
 
         {extra.fifaRank && (
-          <div className="bg-white/10 rounded-xl p-3 text-center mb-6">
+          <div className="bg-white/10 rounded-xl p-3 text-center mb-4">
             <div className={`text-3xl font-bold ${rankColor}`}>#{extra.fifaRank}</div>
             <div className="text-xs text-white/50 mt-1">FIFA World Rank</div>
           </div>
@@ -64,14 +206,14 @@ function TeamDetail({ team, onBack }) {
 
         {extra.coach && (
           <div className="mb-4">
-            <div className="text-xs text-white/40 uppercase tracking-wider mb-2">Head Coach</div>
-            <div className="text-white font-medium">👨‍💼 {extra.coach}</div>
+            <div className="text-xs text-white/40 uppercase tracking-wider mb-1.5">Head Coach</div>
+            <div className="text-white font-medium text-sm">👨‍💼 {extra.coach}</div>
           </div>
         )}
 
         {extra.facts?.length > 0 && (
-          <div>
-            <div className="text-xs text-white/40 uppercase tracking-wider mb-3">Quick Facts</div>
+          <div className="mb-1">
+            <div className="text-xs text-white/40 uppercase tracking-wider mb-2">Quick Facts</div>
             <div className="space-y-2">
               {extra.facts.map((fact, i) => (
                 <div key={i} className="flex gap-2 bg-white/5 rounded-xl p-3">
@@ -83,15 +225,14 @@ function TeamDetail({ team, onBack }) {
           </div>
         )}
 
-        {!extra.fifaRank && !extra.facts && (
-          <p className="text-white/40 text-sm text-center">No additional facts available for this team yet.</p>
-        )}
+        {/* Match history + upcoming */}
+        <ScheduleSection team={team} />
       </div>
     </div>
   );
 }
 
-export default function Teams() {
+export default function Teams({ externalSelected, clearExternal }) {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -109,8 +250,20 @@ export default function Teams() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (selected) {
-    return <TeamDetail team={selected} onBack={() => setSelected(null)} />;
+  // When another tab navigates to a team, open its detail page
+  useEffect(() => {
+    if (externalSelected) setSelected(externalSelected);
+  }, [externalSelected]);
+
+  const activeTeam = selected;
+
+  function handleBack() {
+    setSelected(null);
+    if (clearExternal) clearExternal();
+  }
+
+  if (activeTeam) {
+    return <TeamDetail team={activeTeam} onBack={handleBack} />;
   }
 
   if (loading) return (

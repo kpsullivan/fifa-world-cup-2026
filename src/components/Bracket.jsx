@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { fetchGroupsForBracket, computeBest3rd } from "../data/api";
 import { teamFacts } from "../data/teamFacts";
+import { useTeamNav } from "../context/TeamNav";
 
 // Layout constants
 const SLOT_H  = 72;   // height of one R32 slot (px)
@@ -54,6 +55,7 @@ const RIGHT_SEEDS = [
 
 // ── Compact team row inside a match card ──────────────────────────────────────
 function TeamRow({ team }) {
+  const { navigateToTeam } = useTeamNav();
   // team can be: a real team object, { thirdFrom: "A·B·C" }, or null (TBD winner)
   if (!team) {
     return (
@@ -75,7 +77,10 @@ function TeamRow({ team }) {
   }
   const rank = teamFacts[team.abbreviation]?.fifaRank;
   return (
-    <div className="flex items-center gap-1.5 px-2 py-1">
+    <button
+      onClick={() => navigateToTeam({ id: team.id, displayName: team.name, abbreviation: team.abbreviation, logo: team.logo })}
+      className="flex items-center gap-1.5 px-2 py-1 w-full text-left hover:bg-white/5 transition-colors"
+    >
       {team.logo
         ? <img src={team.logo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
         : <div className="w-4 h-4 rounded-full bg-white/10 flex-shrink-0" />}
@@ -83,7 +88,7 @@ function TeamRow({ team }) {
         {team.abbreviation ?? "TBD"}
       </span>
       {rank && <span className="text-[10px] text-yellow-400/60">#{rank}</span>}
-    </div>
+    </button>
   );
 }
 
