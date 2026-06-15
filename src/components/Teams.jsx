@@ -1,0 +1,168 @@
+import { useState, useEffect } from "react";
+import { fetchTeams } from "../data/api";
+import { teamFacts } from "../data/teamFacts";
+
+function TeamCard({ team, onClick }) {
+  const extra = teamFacts[team.abbreviation] ?? {};
+  const logo = team.logos?.[0]?.href ?? team.logo;
+
+  return (
+    <button
+      onClick={onClick}
+      className="bg-white/10 backdrop-blur rounded-2xl p-4 border border-white/10 text-left hover:bg-white/15 active:scale-95 transition-all w-full"
+    >
+      <div className="flex items-center gap-3">
+        {logo
+          ? <img src={logo} alt={team.displayName} className="w-10 h-10 object-contain" />
+          : <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-xs font-bold">{team.abbreviation}</div>
+        }
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold truncate">{team.displayName ?? team.name}</div>
+          <div className="text-xs text-white/50">{team.abbreviation}</div>
+        </div>
+        {extra.fifaRank && (
+          <div className="text-right flex-shrink-0">
+            <div className="text-yellow-400 font-bold text-lg">#{extra.fifaRank}</div>
+            <div className="text-xs text-white/40">FIFA Rank</div>
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function TeamDetail({ team, onBack }) {
+  const extra = teamFacts[team.abbreviation] ?? {};
+  const logo = team.logos?.[0]?.href ?? team.logo;
+  const rankColor = !extra.fifaRank ? "text-white/60"
+    : extra.fifaRank <= 5 ? "text-yellow-400"
+    : extra.fifaRank <= 15 ? "text-emerald-400"
+    : "text-blue-400";
+
+  return (
+    <div>
+      <button onClick={onBack} className="flex items-center gap-2 text-white/60 hover:text-white mb-4 transition-colors">
+        ← Back to teams
+      </button>
+
+      <div className="bg-white/10 backdrop-blur rounded-2xl p-6 border border-white/10">
+        <div className="text-center mb-6">
+          {logo
+            ? <img src={logo} alt={team.displayName} className="w-24 h-24 object-contain mx-auto mb-3" />
+            : <div className="w-24 h-24 bg-white/10 rounded-full mx-auto mb-3 flex items-center justify-center text-2xl font-bold">{team.abbreviation}</div>
+          }
+          <h2 className="text-2xl font-bold">{team.displayName ?? team.name}</h2>
+          <div className="text-white/50 text-sm mt-1">{team.abbreviation}</div>
+        </div>
+
+        {extra.fifaRank && (
+          <div className="bg-white/10 rounded-xl p-3 text-center mb-6">
+            <div className={`text-3xl font-bold ${rankColor}`}>#{extra.fifaRank}</div>
+            <div className="text-xs text-white/50 mt-1">FIFA World Rank</div>
+          </div>
+        )}
+
+        {extra.coach && (
+          <div className="mb-4">
+            <div className="text-xs text-white/40 uppercase tracking-wider mb-2">Head Coach</div>
+            <div className="text-white font-medium">👨‍💼 {extra.coach}</div>
+          </div>
+        )}
+
+        {extra.facts?.length > 0 && (
+          <div>
+            <div className="text-xs text-white/40 uppercase tracking-wider mb-3">Quick Facts</div>
+            <div className="space-y-2">
+              {extra.facts.map((fact, i) => (
+                <div key={i} className="flex gap-2 bg-white/5 rounded-xl p-3">
+                  <span className="text-yellow-400 flex-shrink-0">⚡</span>
+                  <span className="text-sm text-white/80">{fact}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!extra.fifaRank && !extra.facts && (
+          <p className="text-white/40 text-sm text-center">No additional facts available for this team yet.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function Teams() {
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("rank");
+
+  useEffect(() => {
+    fetchTeams()
+      .then(data => {
+        if (!data.length) throw new Error("API returned 0 teams");
+        setTeams(data);
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (selected) {
+    return <TeamDetail team={selected} onBack={() => setSelected(null)} />;
+  }
+
+  if (loading) return (
+    <div className="text-center text-white/50 py-12">
+      <div className="text-3xl mb-3 animate-spin">⚽</div>
+      <p>Loading teams...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="bg-red-500/20 border border-red-500/30 rounded-2xl p-4 text-center text-red-300">
+      <p className="font-semibold mb-1">Couldn't load teams</p>
+      <p className="text-sm opacity-80">{error}</p>
+    </div>
+  );
+
+  const filtered = teams
+    .filter(t => (t.displayName ?? t.name ?? "").toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === "rank") {
+        const ra = teamFacts[a.abbreviation]?.fifaRank ?? 999;
+        const rb = teamFacts[b.abbreviation]?.fifaRank ?? 999;
+        return ra - rb;
+      }
+      return (a.displayName ?? "").localeCompare(b.displayName ?? "");
+    });
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        <input
+          type="text"
+          placeholder={`Search ${teams.length} teams...`}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-white/40 outline-none focus:border-yellow-400/50 text-sm"
+        />
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+          className="bg-white/10 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm outline-none"
+        >
+          <option value="rank">By Rank</option>
+          <option value="name">A–Z</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        {filtered.map(team => (
+          <TeamCard key={team.id} team={team} onClick={() => setSelected(team)} />
+        ))}
+      </div>
+    </div>
+  );
+}
