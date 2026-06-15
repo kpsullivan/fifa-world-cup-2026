@@ -9,49 +9,78 @@ const CARD_H  = 54;   // match card height (2 teams)
 const CON_W   = 18;   // connector column width between rounds
 const LINE     = "rgba(255,255,255,0.22)";
 
-// 2026 WC bracket seedings — FIFA pre-set group matchup pairings
-// Left half of bracket (matches 1–8)
+// Official 2026 FIFA World Cup R32 bracket — sourced from FIFA.com
+// Left half feeds → R16 M89/M90 → QF M97, and R16 M93/M94 → QF M98 → SF M101
+// "third" means the best 3rd-place team from those specific groups (TBD until group stage ends)
+
 const LEFT_SEEDS = [
-  { home: { g: "A", p: 1 }, away: { g: "B", p: 2 } },
-  { home: { g: "B", p: 1 }, away: { g: "A", p: 2 } },
-  { home: { g: "C", p: 1 }, away: { g: "D", p: 2 } },
-  { home: { g: "D", p: 1 }, away: { g: "C", p: 2 } },
-  { home: { g: "E", p: 1 }, away: { g: "F", p: 2 } },
-  { home: { g: "F", p: 1 }, away: { g: "E", p: 2 } },
-  { home: { g: "G", p: 1 }, away: { g: "H", p: 2 } },
-  { home: { g: "H", p: 1 }, away: { g: "G", p: 2 } },
+  // M74: Winner E  vs Best 3rd from A,B,C,D,F
+  { home: { g: "E", p: 1 }, away: { third: "A·B·C·D·F" } },
+  // M77: Winner I  vs Best 3rd from C,D,F,G,H
+  { home: { g: "I", p: 1 }, away: { third: "C·D·F·G·H" } },
+  // M73: Runner-up A vs Runner-up B
+  { home: { g: "A", p: 2 }, away: { g: "B", p: 2 } },
+  // M75: Winner F  vs Runner-up C
+  { home: { g: "F", p: 1 }, away: { g: "C", p: 2 } },
+  // M83: Runner-up K vs Runner-up L
+  { home: { g: "K", p: 2 }, away: { g: "L", p: 2 } },
+  // M84: Winner H  vs Runner-up J
+  { home: { g: "H", p: 1 }, away: { g: "J", p: 2 } },
+  // M81: Winner D  vs Best 3rd from B,E,F,I,J
+  { home: { g: "D", p: 1 }, away: { third: "B·E·F·I·J" } },
+  // M82: Winner G  vs Best 3rd from A,E,H,I,J
+  { home: { g: "G", p: 1 }, away: { third: "A·E·H·I·J" } },
 ];
 
-// Right half (matches 9–12 known; 13–16 are best 3rd-place teams — TBD)
+// Right half feeds → R16 M91/M92 → QF M99, and R16 M95/M96 → QF M100 → SF M102
 const RIGHT_SEEDS = [
-  { home: { g: "I", p: 1 }, away: { g: "J", p: 2 } },
-  { home: { g: "J", p: 1 }, away: { g: "I", p: 2 } },
-  { home: { g: "K", p: 1 }, away: { g: "L", p: 2 } },
-  { home: { g: "L", p: 1 }, away: { g: "K", p: 2 } },
-  { tbd: "Best 3rd" },
-  { tbd: "Best 3rd" },
-  { tbd: "Best 3rd" },
-  { tbd: "Best 3rd" },
+  // M76: Winner C  vs Runner-up F
+  { home: { g: "C", p: 1 }, away: { g: "F", p: 2 } },
+  // M78: Runner-up E vs Runner-up I
+  { home: { g: "E", p: 2 }, away: { g: "I", p: 2 } },
+  // M79: Winner A  vs Best 3rd from C,E,F,H,I
+  { home: { g: "A", p: 1 }, away: { third: "C·E·F·H·I" } },
+  // M80: Winner L  vs Best 3rd from E,H,I,J,K
+  { home: { g: "L", p: 1 }, away: { third: "E·H·I·J·K" } },
+  // M85: Winner B  vs Best 3rd from E,F,G,I,J
+  { home: { g: "B", p: 1 }, away: { third: "E·F·G·I·J" } },
+  // M86: Winner J  vs Runner-up H
+  { home: { g: "J", p: 1 }, away: { g: "H", p: 2 } },
+  // M87: Winner K  vs Best 3rd from D,E,I,J,L
+  { home: { g: "K", p: 1 }, away: { third: "D·E·I·J·L" } },
+  // M88: Runner-up D vs Runner-up G
+  { home: { g: "D", p: 2 }, away: { g: "G", p: 2 } },
 ];
 
 // ── Compact team row inside a match card ──────────────────────────────────────
-function TeamRow({ team, tbd }) {
-  const rank = team && teamFacts[team.abbreviation]?.fifaRank;
-  if (tbd) {
+function TeamRow({ team }) {
+  // team can be: a real team object, { thirdFrom: "A·B·C" }, or null (TBD winner)
+  if (!team) {
     return (
       <div className="flex items-center gap-1.5 px-2 py-1">
         <div className="w-4 h-4 rounded-full bg-white/10 flex-shrink-0" />
-        <span className="text-xs text-white/25 flex-1 italic">TBD</span>
+        <span className="text-xs text-white/25 flex-1 italic">Winner</span>
       </div>
     );
   }
+  if (team.thirdFrom) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1">
+        <div className="w-4 h-4 rounded-full bg-white/5 border border-dashed border-white/20 flex-shrink-0" />
+        <span className="text-[10px] text-white/40 flex-1 leading-tight">
+          Best 3rd<br />{team.thirdFrom}
+        </span>
+      </div>
+    );
+  }
+  const rank = teamFacts[team.abbreviation]?.fifaRank;
   return (
     <div className="flex items-center gap-1.5 px-2 py-1">
-      {team?.logo
+      {team.logo
         ? <img src={team.logo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
         : <div className="w-4 h-4 rounded-full bg-white/10 flex-shrink-0" />}
       <span className="text-xs font-medium text-white/90 flex-1 truncate">
-        {team?.abbreviation ?? "TBD"}
+        {team.abbreviation ?? "TBD"}
       </span>
       {rank && <span className="text-[10px] text-yellow-400/60">#{rank}</span>}
     </div>
@@ -59,31 +88,21 @@ function TeamRow({ team, tbd }) {
 }
 
 // ── Single match card ─────────────────────────────────────────────────────────
-function MatchCard({ homeTeam, awayTeam, isTbd, label }) {
-  if (isTbd) {
-    return (
-      <div
-        style={{ width: CARD_W, height: CARD_H }}
-        className="rounded-lg border border-dashed border-white/15 bg-white/3 flex items-center justify-center"
-      >
-        <span className="text-[10px] text-white/25 italic">{label ?? "TBD"}</span>
-      </div>
-    );
-  }
-  const homeRank = (homeTeam && teamFacts[homeTeam.abbreviation]?.fifaRank) ?? 999;
-  const awayRank = (awayTeam && teamFacts[awayTeam.abbreviation]?.fifaRank) ?? 999;
-  const hasFavorite = homeTeam && awayTeam;
+function MatchCard({ homeTeam, awayTeam }) {
+  const homeRank = (homeTeam && !homeTeam.thirdFrom && teamFacts[homeTeam.abbreviation]?.fifaRank) ?? 999;
+  const awayRank = (awayTeam && !awayTeam.thirdFrom && teamFacts[awayTeam.abbreviation]?.fifaRank) ?? 999;
+  const bothKnown = homeTeam && awayTeam && !homeTeam.thirdFrom && !awayTeam.thirdFrom;
   const favoriteIsHome = homeRank < awayRank;
 
   return (
     <div style={{ width: CARD_W, height: CARD_H }}
       className="rounded-lg border border-white/20 bg-[#0d2044] overflow-hidden"
     >
-      <div className={hasFavorite && favoriteIsHome ? "bg-yellow-400/10" : ""}>
+      <div className={bothKnown && favoriteIsHome ? "bg-yellow-400/10" : ""}>
         <TeamRow team={homeTeam} />
       </div>
       <div className="border-t border-white/10" />
-      <div className={hasFavorite && !favoriteIsHome ? "bg-yellow-400/10" : ""}>
+      <div className={bothKnown && !favoriteIsHome ? "bg-yellow-400/10" : ""}>
         <TeamRow team={awayTeam} />
       </div>
     </div>
@@ -113,10 +132,8 @@ function RoundColumn({ matches, slotH, label }) {
             }}
           >
             <MatchCard
-              homeTeam={m?.home}
-              awayTeam={m?.away}
-              isTbd={!m || m.tbd != null}
-              label={m?.tbd ?? (m ? undefined : "Winner")}
+              homeTeam={m?.home ?? null}
+              awayTeam={m?.away ?? null}
             />
           </div>
         ))}
@@ -180,7 +197,7 @@ function FinalColumn({ totalH, label }) {
       <div style={{ position: "relative", height: totalH }}>
         <div style={{ position: "absolute", top: (totalH - CARD_H) / 2 - 12, left: 0, right: 0 }}>
           <div className="text-center text-xs text-yellow-400/60 mb-1">🏆 Final</div>
-          <MatchCard isTbd label="Two finalists" />
+          <MatchCard homeTeam={null} awayTeam={null} />
         </div>
       </div>
     </div>
@@ -242,11 +259,17 @@ export default function Bracket() {
   );
 
   // Resolve seedings into actual team objects
+  function resolveSlot(slot) {
+    if (!slot) return null; // TBD future round winner
+    if (slot.third) return { thirdFrom: slot.third }; // best 3rd place — determined after groups
+    return groupMap[slot.g]?.[slot.p] ?? null;
+  }
+
   function resolve(seed) {
     if (!seed || seed.tbd != null) return seed ?? { tbd: "Best 3rd" };
     return {
-      home: groupMap[seed.home.g]?.[seed.home.p] ?? null,
-      away: groupMap[seed.away.g]?.[seed.away.p] ?? null,
+      home: resolveSlot(seed.home),
+      away: resolveSlot(seed.away),
     };
   }
 
@@ -304,7 +327,7 @@ export default function Bracket() {
       </div>
 
       <div className="mt-3 text-xs text-white/30 text-center">
-        Matches 13–16 involve the 8 best 3rd-place teams · Confirmed after group stage ends
+        3rd-place slots confirmed after group stage ends Jun 26 · Seedings verified vs FIFA.com
       </div>
     </div>
   );
