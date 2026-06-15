@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import TodayMatches from "./components/TodayMatches";
 import Standings from "./components/Standings";
 import Teams from "./components/Teams";
@@ -77,6 +78,7 @@ export default function App() {
           )}
         </main>
       </div>
+      <Analytics />
     </TeamNavContext.Provider>
   );
 }
