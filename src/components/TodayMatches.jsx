@@ -29,16 +29,17 @@ function TeamBlock({ team }) {
 }
 
 function MatchCard({ match }) {
-  const isLive = match.statusType === "STATUS_IN_PROGRESS";
-  const isFinal = match.statusType === "STATUS_FINAL";
-  const isScheduled = match.statusType === "STATUS_SCHEDULED";
+  const isLive = match.statusState === "in";
+  const isFinal = match.statusState === "post";
+  const isScheduled = match.statusState === "pre";
 
   const statusColor = isLive ? "bg-red-500 animate-pulse"
     : isFinal ? "bg-gray-600"
     : "bg-emerald-700";
 
-  const statusLabel = isLive ? `LIVE ${match.clock ?? ""}`
-    : isFinal ? "Final"
+  // statusShort returns "42'", "HT", "Final", or "Scheduled" — use clock for live, else statusShort
+  const statusLabel = isLive ? `LIVE ${match.clock || match.statusShort || ""}`
+    : isFinal ? (match.statusShort || "Final")
     : localTime(match.isoDate);
 
   return (

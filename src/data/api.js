@@ -2,6 +2,18 @@
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world";
 const ESPN_V2_BASE = "https://site.api.espn.com/apis/v2/sports/soccer/fifa.world";
 
+// Given the groups array from fetchGroupsForBracket or fetchStandings,
+// returns the 8 best 3rd-place teams sorted by points → GD → GF,
+// each annotated with which group they came from.
+export function computeBest3rd(groups) {
+  return groups
+    .filter(g => g.teams.length >= 3)
+    .map(g => ({ ...g.teams[2], fromGroup: g.letter }))
+    .filter(t => t.played > 0)
+    .sort((a, b) => b.points - a.points || b.goalDiff - a.goalDiff || b.goalsFor - a.goalsFor)
+    .slice(0, 8);
+}
+
 export async function fetchTodayMatches() {
   const today = new Date().toISOString().split("T")[0].replace(/-/g, "");
   const res = await fetch(`${ESPN_BASE}/scoreboard?dates=${today}`);
@@ -105,10 +117,9 @@ function parseMatches(data) {
         color: away?.team?.color,
         score: away?.score,
       },
-      statusType: status?.name,       // "STATUS_FINAL", "STATUS_IN_PROGRESS", "STATUS_SCHEDULED"
-      statusDetail: status?.detail,
-      statusShort: status?.shortDetail,
-      clock: comp?.status?.displayClock,
+      statusState: comp?.status?.type?.state,  // "pre" | "in" | "post" — most reliable live check
+      statusShort: status?.shortDetail,        // "42'" | "HT" | "Final" | "1:00 PM ET"
+      clock: comp?.status?.displayClock,       // "42'" during live
       note: comp?.notes?.[0]?.headline ?? "",
     };
   });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchGroupsForBracket } from "../data/api";
+import { fetchGroupsForBracket, computeBest3rd } from "../data/api";
 import { teamFacts } from "../data/teamFacts";
 
 // Layout constants
@@ -227,6 +227,7 @@ function FinalConnector({ totalH, side, label }) {
 // ── Main Bracket component ────────────────────────────────────────────────────
 export default function Bracket() {
   const [groupMap, setGroupMap] = useState({});
+  const [best3rd, setBest3rd]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
 
@@ -239,6 +240,7 @@ export default function Bracket() {
           g.teams.forEach((team, i) => { map[g.letter][i + 1] = team; });
         });
         setGroupMap(map);
+        setBest3rd(computeBest3rd(groups));
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -261,7 +263,12 @@ export default function Bracket() {
   // Resolve seedings into actual team objects
   function resolveSlot(slot) {
     if (!slot) return null; // TBD future round winner
-    if (slot.third) return { thirdFrom: slot.third }; // best 3rd place — determined after groups
+    if (slot.third) {
+      // Find the best-ranked 3rd-place team whose group appears in the eligible list
+      const eligible = slot.third.split("·");
+      const match = best3rd.find(t => eligible.includes(t.fromGroup));
+      return match ?? { thirdFrom: slot.third };
+    }
     return groupMap[slot.g]?.[slot.p] ?? null;
   }
 

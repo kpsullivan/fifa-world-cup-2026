@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { fetchStandings } from "../data/api";
+import { fetchGroupsForBracket, computeBest3rd } from "../data/api";
 
-function GroupTable({ group }) {
+function GroupTable({ group, best3rdIds }) {
   return (
     <div className="bg-white/10 backdrop-blur rounded-2xl mb-4 overflow-hidden border border-white/10">
       <div className="bg-yellow-400/20 px-4 py-2 border-b border-white/10">
@@ -20,32 +20,47 @@ function GroupTable({ group }) {
           </tr>
         </thead>
         <tbody>
-          {group.teams.map((team, i) => (
-            <tr key={team.teamId ?? i} className={`border-t border-white/5 ${i < 2 ? "bg-emerald-400/5" : ""}`}>
-              <td className="px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  {team.logo ? (
-                    <img src={team.logo} alt={team.name} className="w-6 h-6 object-contain" />
-                  ) : (
-                    <div className="w-6 h-6 bg-white/10 rounded-full" />
-                  )}
-                  <span className="font-medium text-sm truncate">{team.name}</span>
-                </div>
-              </td>
-              <td className="text-center px-1 py-2.5 text-white/70">{team.played}</td>
-              <td className="text-center px-1 py-2.5 text-white/70">{team.wins}</td>
-              <td className="text-center px-1 py-2.5 text-white/70">{team.draws}</td>
-              <td className="text-center px-1 py-2.5 text-white/70">{team.losses}</td>
-              <td className="text-center px-1 py-2.5 text-white/70">
-                {team.goalDiff > 0 ? "+" : ""}{team.goalDiff}
-              </td>
-              <td className="text-center px-2 py-2.5 font-bold text-yellow-400">{team.points}</td>
-            </tr>
-          ))}
+          {group.teams.map((team, i) => {
+            const isTop2 = i < 2;
+            const is3rd = i === 2;
+            const isQualified3rd = is3rd && best3rdIds.has(team.id);
+            const rowBg = isTop2
+              ? "bg-emerald-400/5"
+              : isQualified3rd
+              ? "bg-amber-400/8"
+              : "";
+            return (
+              <tr key={team.id ?? i} className={`border-t border-white/5 ${rowBg}`}>
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    {team.logo ? (
+                      <img src={team.logo} alt={team.name} className="w-6 h-6 object-contain" />
+                    ) : (
+                      <div className="w-6 h-6 bg-white/10 rounded-full" />
+                    )}
+                    <span className="font-medium text-sm truncate">{team.name}</span>
+                    {isQualified3rd && (
+                      <span className="text-[10px] text-amber-400 font-semibold ml-1">★3rd</span>
+                    )}
+                  </div>
+                </td>
+                <td className="text-center px-1 py-2.5 text-white/70">{team.played}</td>
+                <td className="text-center px-1 py-2.5 text-white/70">{team.wins}</td>
+                <td className="text-center px-1 py-2.5 text-white/70">{team.draws}</td>
+                <td className="text-center px-1 py-2.5 text-white/70">{team.losses}</td>
+                <td className="text-center px-1 py-2.5 text-white/70">
+                  {team.goalDiff > 0 ? "+" : ""}{team.goalDiff}
+                </td>
+                <td className="text-center px-2 py-2.5 font-bold text-yellow-400">{team.points}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-      <div className="px-4 py-1.5 border-t border-white/5 text-xs text-emerald-400/70">
-        ● Top 2 advance to Round of 32
+      <div className="px-4 py-1.5 border-t border-white/5 text-xs text-white/40">
+        <span className="text-emerald-400/70">● Top 2 advance</span>
+        <span className="mx-2">·</span>
+        <span className="text-amber-400/70">★ Best 3rd (top 8 across all groups also advance)</span>
       </div>
     </div>
   );
@@ -53,12 +68,17 @@ function GroupTable({ group }) {
 
 export default function Standings() {
   const [groups, setGroups] = useState([]);
+  const [best3rdIds, setBest3rdIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchStandings()
-      .then(setGroups)
+    fetchGroupsForBracket()
+      .then(groups => {
+        setGroups(groups);
+        const best3rd = computeBest3rd(groups);
+        setBest3rdIds(new Set(best3rd.map(t => t.id)));
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -86,9 +106,9 @@ export default function Standings() {
   return (
     <div>
       <p className="text-white/50 text-xs mb-4 text-center">
-        Top 2 from each group advance · 2026 format: 48 teams, 12 groups
+        Top 2 from each group advance · Best 8 third-place teams also advance
       </p>
-      {groups.map(g => <GroupTable key={g.name} group={g} />)}
+      {groups.map(g => <GroupTable key={g.name} group={g} best3rdIds={best3rdIds} />)}
     </div>
   );
 }
