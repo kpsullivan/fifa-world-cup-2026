@@ -62,45 +62,20 @@ export async function fetchGroupsForBracket() {
   });
 }
 
-export async function fetchTeamSchedule(teamId) {
-  const res = await fetch(`${ESPN_BASE}/teams/${teamId}/schedule`);
-  if (!res.ok) throw new Error(`Failed to fetch schedule (${res.status})`);
+// Cache the full tournament schedule so multiple team lookups share one fetch
+let _tournamentCache = null;
+async function fetchAllTournamentMatches() {
+  if (_tournamentCache) return _tournamentCache;
+  const res = await fetch(`${ESPN_BASE}/scoreboard?dates=20260601-20260720&limit=200`);
+  if (!res.ok) throw new Error(`Failed to fetch tournament schedule (${res.status})`);
   const data = await res.json();
-  const events = data.events ?? [];
-  return events.map(event => {
-    const comp = event.competitions?.[0];
-    const home = comp?.competitors?.find(c => c.homeAway === "home");
-    const away = comp?.competitors?.find(c => c.homeAway === "away");
-    const status = comp?.status?.type;
-    return {
-      id: event.id,
-      isoDate: event.date,
-      venue: comp?.venue?.fullName ?? "",
-      city: comp?.venue?.address?.city ?? "",
-      home: {
-        id: home?.team?.id,
-        name: home?.team?.displayName ?? home?.team?.name,
-        abbreviation: home?.team?.abbreviation,
-        logo: home?.team?.logo,
-        color: home?.team?.color,
-        score: home?.score,
-        winner: home?.winner,
-      },
-      away: {
-        id: away?.team?.id,
-        name: away?.team?.displayName ?? away?.team?.name,
-        abbreviation: away?.team?.abbreviation,
-        logo: away?.team?.logo,
-        color: away?.team?.color,
-        score: away?.score,
-        winner: away?.winner,
-      },
-      statusState: comp?.status?.type?.state,
-      statusShort: status?.shortDetail,
-      clock: comp?.status?.displayClock,
-      note: comp?.notes?.[0]?.headline ?? "",
-    };
-  });
+  _tournamentCache = parseMatches(data);
+  return _tournamentCache;
+}
+
+export async function fetchTeamSchedule(teamId) {
+  const all = await fetchAllTournamentMatches();
+  return all.filter(m => m.home.id === teamId || m.away.id === teamId);
 }
 
 // Derive teams from standings (CORS-friendly) instead of the /teams endpoint (no CORS header)
