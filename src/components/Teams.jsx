@@ -19,25 +19,24 @@ function pastMatchBullets(myAbbr, oppAbbr, myScore, oppScore, won, drew) {
 
   if (drew) {
     bullets.push(myScore === 0
-      ? "Neither side could find the net — defenses dominated."
-      : `Both teams level at ${myScore}-${oppScore} — points shared after a competitive match.`);
+      ? "Neither side could find the net — both defenses held firm."
+      : `Evenly matched — points shared after a competitive contest.`);
   } else if (won) {
     bullets.push(margin >= 3
-      ? `Dominant ${myScore}-${oppScore} performance — controlled from start to finish.`
+      ? `Dominant performance — controlled from start to finish.`
       : margin === 2
-      ? `Comfortable ${myScore}-${oppScore} victory with a two-goal cushion.`
-      : `Hard-fought ${myScore}-${oppScore} win — closely contested throughout.`);
+      ? `Comfortable victory with a two-goal cushion.`
+      : `Hard-fought win — closely contested throughout.`);
   } else {
     bullets.push(margin >= 3
-      ? `Difficult ${myScore}-${oppScore} defeat — outclassed on the day.`
+      ? `Difficult defeat — outclassed on the day.`
       : margin === 2
-      ? `${myScore}-${oppScore} loss — struggled to find a way back into the game.`
-      : `Narrow ${myScore}-${oppScore} defeat in a tight contest.`);
+      ? `Struggled to find a way back into the game.`
+      : `Narrow defeat in a tight contest.`);
   }
 
-  // Add a relevant fact about the opponent for context
-  const oppFact = teamFacts[oppAbbr]?.facts?.[0];
-  if (oppFact) bullets.push(oppFact);
+  const oppPlayer = teamFacts[oppAbbr]?.players?.[0];
+  if (oppPlayer) bullets.push(`${oppAbbr} key player: ${oppPlayer}`);
 
   return bullets;
 }
@@ -45,28 +44,26 @@ function pastMatchBullets(myAbbr, oppAbbr, myScore, oppScore, won, drew) {
 function upcomingMatchBullets(myAbbr, oppAbbr) {
   const myRank = teamFacts[myAbbr]?.fifaRank;
   const oppRank = teamFacts[oppAbbr]?.fifaRank;
-  const myCoach = teamFacts[myAbbr]?.coach;
-  const oppCoach = teamFacts[oppAbbr]?.coach;
   const bullets = [];
 
   if (myRank && oppRank) {
     const diff = Math.abs(myRank - oppRank);
     if (diff <= 4) {
-      bullets.push(`Evenly matched on paper — ${myAbbr} (#${myRank}) vs ${oppAbbr} (#${oppRank}). Could go either way.`);
+      bullets.push(`Closely matched on paper — ${myAbbr} (#${myRank} FIFA) vs ${oppAbbr} (#${oppRank}). Could go either way.`);
     } else if (myRank < oppRank) {
-      bullets.push(`${myAbbr} are the favorites entering ranked #${myRank} vs ${oppAbbr} at #${oppRank} — but upsets happen.`);
+      bullets.push(`${myAbbr} enter as favorites (#${myRank} FIFA) but ${oppAbbr} (#${oppRank}) are capable of an upset.`);
     } else {
-      bullets.push(`${oppAbbr} (#${oppRank}) are the higher-ranked side. ${myAbbr} (#${myRank}) will need a strong performance.`);
+      bullets.push(`${oppAbbr} (#${oppRank} FIFA) are the higher-ranked side — ${myAbbr} (#${myRank}) will need a big performance.`);
     }
   }
 
-  // One watch-for from each team
-  const myFact = teamFacts[myAbbr]?.facts?.[0];
-  const oppFact = teamFacts[oppAbbr]?.facts?.[0];
-  if (myFact) bullets.push(`Watch ${myAbbr}: ${myFact}`);
-  else if (oppFact) bullets.push(`Watch ${oppAbbr}: ${oppFact}`);
+  const myPlayer = teamFacts[myAbbr]?.players?.[0];
+  const oppPlayer = teamFacts[oppAbbr]?.players?.[0];
+  if (myPlayer) bullets.push(`Watch ${myAbbr}: ${myPlayer}`);
+  if (oppPlayer) bullets.push(`Watch ${oppAbbr}: ${oppPlayer}`);
 
-  if (myCoach && oppCoach) bullets.push(`Coaching matchup: ${myCoach} vs ${oppCoach}.`);
+  const trending = teamFacts[oppAbbr]?.trending;
+  if (trending) bullets.push(`💬 ${trending}`);
 
   return bullets;
 }

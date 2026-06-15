@@ -124,6 +124,7 @@ function parseMatches(data) {
         logo: home?.team?.logo,           // scoreboard uses singular "logo"
         color: home?.team?.color,         // hex color e.g. "c60b1e"
         score: home?.score,
+        winner: home?.winner,
       },
       away: {
         id: away?.team?.id,
@@ -132,6 +133,7 @@ function parseMatches(data) {
         logo: away?.team?.logo,
         color: away?.team?.color,
         score: away?.score,
+        winner: away?.winner,
       },
       statusState: comp?.status?.type?.state,  // "pre" | "in" | "post" — most reliable live check
       statusShort: status?.shortDetail,        // "42'" | "HT" | "Final" | "1:00 PM ET"
