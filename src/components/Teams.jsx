@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchTeams, fetchTeamSchedule } from "../data/api";
+import { fetchTeams, fetchTeamSchedule, fetchMatchSummary } from "../data/api";
 import { teamFacts } from "../data/teamFacts";
 import { useTeamNav } from "../context/TeamNav";
 
@@ -13,30 +13,55 @@ function safeScore(val) {
   return isNaN(n) ? null : n;
 }
 
-function pastMatchBullets(myAbbr, oppAbbr, myScore, oppScore, won, drew) {
+function statBullets(myAbbr, oppAbbr, myScore, oppScore, won, drew, teamStats) {
   const bullets = [];
+  const my = teamStats[myAbbr] ?? {};
+  const opp = teamStats[oppAbbr] ?? {};
+
+  const myPoss = parseFloat(my.possessionPct);
+  const oppPoss = parseFloat(opp.possessionPct);
+  const myShots = parseInt(my.totalShots);
+  const oppShots = parseInt(opp.totalShots);
+  const mySOT = parseInt(my.shotsOnTarget);
+  const oppSOT = parseInt(opp.shotsOnTarget);
+  const myRed = parseInt(my.redCards) || 0;
+  const oppRed = parseInt(opp.redCards) || 0;
   const margin = Math.abs(myScore - oppScore);
 
-  if (drew) {
-    bullets.push(myScore === 0
-      ? "Neither side could find the net — both defenses held firm."
-      : `Evenly matched — points shared after a competitive contest.`);
-  } else if (won) {
-    bullets.push(margin >= 3
-      ? `Dominant performance — controlled from start to finish.`
-      : margin === 2
-      ? `Comfortable victory with a two-goal cushion.`
-      : `Hard-fought win — closely contested throughout.`);
+  // Possession-based narrative
+  if (!isNaN(myPoss) && !isNaN(oppPoss)) {
+    if (oppPoss >= 60 && drew) {
+      bullets.push(`Resolute defending — withstood ${oppAbbr}'s ${Math.round(oppPoss)}% possession and ${oppShots} shots to earn a hard-fought point.`);
+    } else if (oppPoss >= 60 && won) {
+      bullets.push(`Classic counter-punch — ${oppAbbr} had ${Math.round(oppPoss)}% possession but ${myAbbr} were clinical on the break.`);
+    } else if (oppPoss >= 60 && !won && !drew) {
+      bullets.push(`${oppAbbr} controlled the match with ${Math.round(oppPoss)}% possession and ${oppShots} shots, converting their pressure into goals.`);
+    } else if (myPoss >= 60 && won) {
+      bullets.push(`Dominant display — ${Math.round(myPoss)}% possession, ${myShots} shots, and ${mySOT} on target in a commanding win.`);
+    } else if (myPoss >= 60 && drew) {
+      bullets.push(`Dominated the ball (${Math.round(myPoss)}% possession, ${myShots} shots) but ${oppAbbr}'s keeper and defense held firm.`);
+    } else if (myPoss >= 60 && !won) {
+      bullets.push(`Despite ${Math.round(myPoss)}% possession and ${myShots} shots, couldn't convert — ${oppAbbr} punished the missed chances.`);
+    } else if (won) {
+      bullets.push(margin >= 2
+        ? `Efficient performance — made the most of ${myShots} shots with ${mySOT} on target.`
+        : `Edged a closely contested match — ${myShots} shots vs ${oppShots} in a tight battle.`);
+    } else if (drew) {
+      bullets.push(`Even contest — ${myShots} shots vs ${oppShots}, neither side could find a winner.`);
+    } else {
+      bullets.push(`${oppAbbr} were sharper — their ${oppSOT} shots on target proved decisive.`);
+    }
   } else {
-    bullets.push(margin >= 3
-      ? `Difficult defeat — outclassed on the day.`
-      : margin === 2
-      ? `Struggled to find a way back into the game.`
-      : `Narrow defeat in a tight contest.`);
+    // Fallback if no stats
+    const m = margin;
+    if (drew) bullets.push(myScore === 0 ? "Neither side could find the net." : "Points shared after a competitive contest.");
+    else if (won) bullets.push(m >= 3 ? "Dominant performance from start to finish." : m === 2 ? "Comfortable win with a two-goal cushion." : "Hard-fought victory in a tight match.");
+    else bullets.push(m >= 3 ? "Difficult defeat on the day." : m === 2 ? "Struggled to find a way back into the game." : "Narrow defeat in a tight contest.");
   }
 
-  const oppPlayer = teamFacts[oppAbbr]?.players?.[0];
-  if (oppPlayer) bullets.push(`${oppAbbr} key player: ${oppPlayer}`);
+  // Red card note
+  if (myRed > 0) bullets.push(`${myAbbr} played with ${myRed === 1 ? "ten" : "nine"} men after a red card.`);
+  if (oppRed > 0) bullets.push(`${oppAbbr} were reduced to ${oppRed === 1 ? "ten" : "nine"} men — ${myAbbr} had the numerical advantage.`);
 
   return bullets;
 }
@@ -114,8 +139,16 @@ function ScheduleSection({ team }) {
     const won = me.winner;
     const drew = scoresKnown && !me.winner && !opp.winner;
     const resultLabel = won ? "W" : drew ? "D" : "L";
+    const [teamStats, setTeamStats] = useState({});
+
+    useEffect(() => {
+      fetchMatchSummary(match.id)
+        .then(setTeamStats)
+        .catch(() => {}); // silently fall back to generic bullets
+    }, [match.id]);
+
     const bullets = scoresKnown
-      ? pastMatchBullets(team.abbreviation, opp.abbreviation, myScore, oppScore, won, drew)
+      ? statBullets(team.abbreviation, opp.abbreviation, myScore, oppScore, won, drew, teamStats)
       : [];
 
     return (

@@ -62,6 +62,20 @@ export async function fetchGroupsForBracket() {
   });
 }
 
+export async function fetchMatchSummary(eventId) {
+  const res = await fetch(`${ESPN_BASE}/summary?event=${eventId}`);
+  if (!res.ok) throw new Error(`Summary unavailable (${res.status})`);
+  const data = await res.json();
+  const teamStats = {};
+  for (const t of data.boxscore?.teams ?? []) {
+    const abbr = t.team?.abbreviation;
+    const s = {};
+    for (const stat of t.statistics ?? []) s[stat.name] = stat.displayValue;
+    teamStats[abbr] = s;
+  }
+  return teamStats; // { "ESP": { possessionPct, totalShots, shotsOnTarget, yellowCards, redCards, ... } }
+}
+
 // Cache the full tournament schedule so multiple team lookups share one fetch
 let _tournamentCache = null;
 async function fetchAllTournamentMatches() {
