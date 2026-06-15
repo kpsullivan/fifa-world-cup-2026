@@ -8,15 +8,81 @@ function localTime(isoDate) {
   return new Date(isoDate).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function matchPreview(myAbbr, opponent) {
-  const myRank = teamFacts[myAbbr]?.fifaRank;
-  const oppRank = teamFacts[opponent?.abbreviation]?.fifaRank;
-  if (myRank && oppRank) {
-    if (myRank < oppRank) return `${myAbbr} enter as favorites (#${myRank} FIFA vs #${oppRank}).`;
-    if (oppRank < myRank) return `${opponent.abbreviation} are the higher-ranked side (#${oppRank} vs #${myRank}).`;
-    return `Closely matched — both ranked around #${myRank} by FIFA.`;
+function safeScore(val) {
+  const n = parseInt(val);
+  return isNaN(n) ? null : n;
+}
+
+function pastMatchBullets(myAbbr, oppAbbr, myScore, oppScore, won, drew) {
+  const bullets = [];
+  const margin = Math.abs(myScore - oppScore);
+
+  if (drew) {
+    bullets.push(myScore === 0
+      ? "Neither side could find the net — defenses dominated."
+      : `Both teams level at ${myScore}-${oppScore} — points shared after a competitive match.`);
+  } else if (won) {
+    bullets.push(margin >= 3
+      ? `Dominant ${myScore}-${oppScore} performance — controlled from start to finish.`
+      : margin === 2
+      ? `Comfortable ${myScore}-${oppScore} victory with a two-goal cushion.`
+      : `Hard-fought ${myScore}-${oppScore} win — closely contested throughout.`);
+  } else {
+    bullets.push(margin >= 3
+      ? `Difficult ${myScore}-${oppScore} defeat — outclassed on the day.`
+      : margin === 2
+      ? `${myScore}-${oppScore} loss — struggled to find a way back into the game.`
+      : `Narrow ${myScore}-${oppScore} defeat in a tight contest.`);
   }
-  return "";
+
+  // Add a relevant fact about the opponent for context
+  const oppFact = teamFacts[oppAbbr]?.facts?.[0];
+  if (oppFact) bullets.push(oppFact);
+
+  return bullets;
+}
+
+function upcomingMatchBullets(myAbbr, oppAbbr) {
+  const myRank = teamFacts[myAbbr]?.fifaRank;
+  const oppRank = teamFacts[oppAbbr]?.fifaRank;
+  const myCoach = teamFacts[myAbbr]?.coach;
+  const oppCoach = teamFacts[oppAbbr]?.coach;
+  const bullets = [];
+
+  if (myRank && oppRank) {
+    const diff = Math.abs(myRank - oppRank);
+    if (diff <= 4) {
+      bullets.push(`Evenly matched on paper — ${myAbbr} (#${myRank}) vs ${oppAbbr} (#${oppRank}). Could go either way.`);
+    } else if (myRank < oppRank) {
+      bullets.push(`${myAbbr} are the favorites entering ranked #${myRank} vs ${oppAbbr} at #${oppRank} — but upsets happen.`);
+    } else {
+      bullets.push(`${oppAbbr} (#${oppRank}) are the higher-ranked side. ${myAbbr} (#${myRank}) will need a strong performance.`);
+    }
+  }
+
+  // One watch-for from each team
+  const myFact = teamFacts[myAbbr]?.facts?.[0];
+  const oppFact = teamFacts[oppAbbr]?.facts?.[0];
+  if (myFact) bullets.push(`Watch ${myAbbr}: ${myFact}`);
+  else if (oppFact) bullets.push(`Watch ${oppAbbr}: ${oppFact}`);
+
+  if (myCoach && oppCoach) bullets.push(`Coaching matchup: ${myCoach} vs ${oppCoach}.`);
+
+  return bullets;
+}
+
+function Bullets({ items }) {
+  if (!items.length) return null;
+  return (
+    <ul className="mt-1.5 space-y-1">
+      {items.map((b, i) => (
+        <li key={i} className="flex gap-1.5 text-xs text-white/50 leading-snug">
+          <span className="text-white/25 flex-shrink-0 mt-0.5">•</span>
+          <span>{b}</span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function ScheduleSection({ team }) {
@@ -45,30 +111,37 @@ function ScheduleSection({ team }) {
   function OpponentRow({ match, isHome }) {
     const me = isHome ? match.home : match.away;
     const opp = isHome ? match.away : match.home;
-    const myScore = parseInt(me.score ?? 0);
-    const oppScore = parseInt(opp.score ?? 0);
+    const myScore = safeScore(me.score);
+    const oppScore = safeScore(opp.score);
+    const scoresKnown = myScore !== null && oppScore !== null;
     const won = me.winner;
-    const drew = !me.winner && !opp.winner;
-    const resultColor = won ? "text-emerald-400" : drew ? "text-white/60" : "text-red-400";
+    const drew = scoresKnown && !me.winner && !opp.winner;
     const resultLabel = won ? "W" : drew ? "D" : "L";
+    const bullets = scoresKnown
+      ? pastMatchBullets(team.abbreviation, opp.abbreviation, myScore, oppScore, won, drew)
+      : [];
 
     return (
-      <div className="flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
-        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${won ? "bg-emerald-400/20 text-emerald-400" : drew ? "bg-white/10 text-white/60" : "bg-red-400/20 text-red-400"}`}>
-          {resultLabel}
+      <div className="py-3 border-b border-white/5 last:border-0">
+        <div className="flex items-center gap-3">
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${won ? "bg-emerald-400/20 text-emerald-400" : drew ? "bg-white/10 text-white/60" : "bg-red-400/20 text-red-400"}`}>
+            {resultLabel}
+          </div>
+          <button
+            onClick={() => navigateToTeam({ id: opp.id, displayName: opp.name, abbreviation: opp.abbreviation, logo: opp.logo })}
+            className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-70 transition-opacity"
+          >
+            {opp.logo
+              ? <img src={opp.logo} alt={opp.name} className="w-5 h-5 object-contain flex-shrink-0" />
+              : <div className="w-5 h-5 bg-white/10 rounded-full flex-shrink-0" />}
+            <span className="text-sm truncate text-white/80">{opp.name}</span>
+          </button>
+          {scoresKnown
+            ? <span className={`text-sm font-bold flex-shrink-0 ${won ? "text-emerald-400" : drew ? "text-white/60" : "text-red-400"}`}>{myScore}–{oppScore}</span>
+            : <span className="text-sm text-white/30 flex-shrink-0">–</span>
+          }
         </div>
-        <button
-          onClick={() => navigateToTeam({ id: opp.id, displayName: opp.name, abbreviation: opp.abbreviation, logo: opp.logo })}
-          className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-70 transition-opacity"
-        >
-          {opp.logo
-            ? <img src={opp.logo} alt={opp.name} className="w-5 h-5 object-contain flex-shrink-0" />
-            : <div className="w-5 h-5 bg-white/10 rounded-full flex-shrink-0" />}
-          <span className="text-sm truncate text-white/80">{opp.name}</span>
-        </button>
-        <span className={`text-sm font-bold flex-shrink-0 ${resultColor}`}>
-          {myScore}–{oppScore}
-        </span>
+        <Bullets items={bullets} />
       </div>
     );
   }
@@ -76,11 +149,11 @@ function ScheduleSection({ team }) {
   function UpcomingRow({ match }) {
     const isHome = match.home.id === team.id;
     const opp = isHome ? match.away : match.home;
-    const preview = matchPreview(team.abbreviation, opp);
+    const bullets = upcomingMatchBullets(team.abbreviation, opp.abbreviation);
 
     return (
       <div className="py-3 border-b border-white/5 last:border-0">
-        <div className="flex items-center gap-3 mb-1.5">
+        <div className="flex items-center gap-3 mb-1">
           <button
             onClick={() => navigateToTeam({ id: opp.id, displayName: opp.name, abbreviation: opp.abbreviation, logo: opp.logo })}
             className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-70 transition-opacity"
@@ -93,7 +166,7 @@ function ScheduleSection({ team }) {
           <span className="text-xs text-white/40 flex-shrink-0">{localTime(match.isoDate)}</span>
         </div>
         {match.note && <div className="text-xs text-yellow-400/70 mb-1">{match.note}</div>}
-        {preview && <div className="text-xs text-white/50 leading-snug">{preview}</div>}
+        <Bullets items={bullets} />
       </div>
     );
   }
