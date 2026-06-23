@@ -14,8 +14,13 @@ export function computeBest3rd(groups) {
     .slice(0, 8);
 }
 
+function localDateStr() {
+  // Use local date (not UTC) so evening users don't jump to the next day
+  return new Date().toLocaleDateString("en-CA").replace(/-/g, "");
+}
+
 export async function fetchTodayMatches() {
-  const today = new Date().toISOString().split("T")[0].replace(/-/g, "");
+  const today = localDateStr();
   const res = await fetch(`${ESPN_BASE}/scoreboard?dates=${today}`);
   if (!res.ok) throw new Error("Failed to fetch matches");
   const data = await res.json();
@@ -66,6 +71,7 @@ export async function fetchMatchSummary(eventId) {
   const res = await fetch(`${ESPN_BASE}/summary?event=${eventId}`);
   if (!res.ok) throw new Error(`Summary unavailable (${res.status})`);
   const data = await res.json();
+
   const teamStats = {};
   for (const t of data.boxscore?.teams ?? []) {
     const abbr = t.team?.abbreviation;
@@ -73,7 +79,58 @@ export async function fetchMatchSummary(eventId) {
     for (const stat of t.statistics ?? []) s[stat.name] = stat.displayValue;
     teamStats[abbr] = s;
   }
-  return teamStats; // { "ESP": { possessionPct, totalShots, shotsOnTarget, yellowCards, redCards, ... } }
+
+  const goals = [];
+  for (const event of data.keyEvents ?? []) {
+    const type = event.type?.type;
+    if (!["goal", "penalty-goal", "own-goal"].includes(type)) continue;
+    const player = event.participants?.[0]?.athlete;
+    // Team name appears in parentheses: "Julián Quiñones (Mexico) right footed..."
+    const teamMatch = event.text?.match(/\(([^)]+)\)/);
+    goals.push({
+      player: player?.displayName ?? "?",
+      team: teamMatch?.[1] ?? "",
+      clock: event.clock?.displayValue ?? "",
+      isOwnGoal: type === "own-goal",
+      isPenalty: type === "penalty-goal",
+    });
+  }
+
+  return { teamStats, goals };
+}
+
+export async function fetchTopScorers() {
+  const all = await fetchAllTournamentMatches();
+  const completed = all.filter(m => m.statusState === "post");
+
+  // Build team name → logo/abbreviation map from match data
+  const teamMap = {};
+  for (const m of completed) {
+    if (m.home.name) teamMap[m.home.name] = { abbreviation: m.home.abbreviation, logo: m.home.logo };
+    if (m.away.name) teamMap[m.away.name] = { abbreviation: m.away.abbreviation, logo: m.away.logo };
+  }
+
+  const results = await Promise.allSettled(
+    completed.map(m => fetchMatchSummary(m.id))
+  );
+
+  const tally = {};
+  for (const r of results) {
+    if (r.status !== "fulfilled") continue;
+    for (const goal of r.value.goals ?? []) {
+      if (goal.isOwnGoal) continue;
+      const key = goal.player;
+      if (!tally[key]) {
+        const info = teamMap[goal.team] ?? {};
+        tally[key] = { name: goal.player, team: goal.team, abbreviation: info.abbreviation ?? "", logo: info.logo ?? null, goals: 0 };
+      }
+      tally[key].goals++;
+    }
+  }
+
+  return Object.values(tally)
+    .filter(s => s.goals > 0)
+    .sort((a, b) => b.goals - a.goals);
 }
 
 // Cache the full tournament schedule so multiple team lookups share one fetch

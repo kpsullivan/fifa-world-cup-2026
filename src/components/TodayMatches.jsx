@@ -3,6 +3,13 @@ import { fetchMatchesByDate } from "../data/api";
 import { teamFacts } from "../data/teamFacts";
 import { useTeamNav } from "../context/TeamNav";
 
+function localDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function localTime(isoDate) {
   if (!isoDate) return "";
   return new Date(isoDate).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -83,12 +90,12 @@ function MatchCard({ match }) {
 
 function DatePicker({ selectedDate, onSelect }) {
   const today = new Date();
-  const todayStr = today.toISOString().split("T")[0];
+  const todayStr = localDateStr(today);
   const dates = [];
   for (let i = -5; i <= 10; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    dates.push(d.toISOString().split("T")[0]);
+    dates.push(localDateStr(d));
   }
 
   const formatLabel = (str) => {
@@ -117,7 +124,7 @@ function DatePicker({ selectedDate, onSelect }) {
 }
 
 export default function TodayMatches() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDateStr(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);

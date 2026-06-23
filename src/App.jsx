@@ -4,12 +4,14 @@ import TodayMatches from "./components/TodayMatches";
 import Standings from "./components/Standings";
 import Teams from "./components/Teams";
 import Bracket from "./components/Bracket";
+import Scorers from "./components/Scorers";
 import { TeamNavContext } from "./context/TeamNav";
 import "./index.css";
 
 const tabs = [
   { id: "matches",   label: "Matches",  icon: "⚽" },
   { id: "standings", label: "Standings", icon: "📊" },
+  { id: "scorers",   label: "Scorers",  icon: "🥅" },
   { id: "bracket",   label: "Bracket",  icon: "🏆" },
   { id: "teams",     label: "Teams",    icon: "🌍" },
 ];
@@ -72,6 +74,7 @@ export default function App() {
         <main className="max-w-lg mx-auto px-4 py-4 pb-8">
           {activeTab === "matches"   && <TodayMatches />}
           {activeTab === "standings" && <Standings />}
+          {activeTab === "scorers"   && <Scorers />}
           {activeTab === "bracket"   && <Bracket />}
           {activeTab === "teams"     && (
             <Teams externalSelected={pendingTeam} clearExternal={clearPendingTeam} />

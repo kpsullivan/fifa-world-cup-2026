@@ -136,25 +136,45 @@ function ScheduleSection({ team }) {
     const myScore = safeScore(me.score);
     const oppScore = safeScore(opp.score);
     const scoresKnown = myScore !== null && oppScore !== null;
-    const won = me.winner;
-    const drew = scoresKnown && !me.winner && !opp.winner;
-    const resultLabel = won ? "W" : drew ? "D" : "L";
-    const [teamStats, setTeamStats] = useState({});
+    const isLive = match.statusState === "in";
+    const isPost = match.statusState === "post";
+    const won = isPost && me.winner;
+    const drew = isPost && scoresKnown && !me.winner && !opp.winner;
+    const resultLabel = isLive ? "●" : won ? "W" : drew ? "D" : "L";
+    const resultBg = isLive ? "bg-red-500/20 text-red-400 animate-pulse"
+      : won ? "bg-emerald-400/20 text-emerald-400"
+      : drew ? "bg-white/10 text-white/60"
+      : "bg-red-400/20 text-red-400";
+
+    const [summary, setSummary] = useState({ teamStats: {}, goals: [] });
 
     useEffect(() => {
+      if (!isPost) return;
       fetchMatchSummary(match.id)
-        .then(setTeamStats)
-        .catch(() => {}); // silently fall back to generic bullets
-    }, [match.id]);
+        .then(setSummary)
+        .catch(() => {});
+    }, [match.id, isPost]);
 
-    const bullets = scoresKnown
+    const { teamStats, goals } = summary;
+
+    // My team's goals and opponent's goals, labelled for display
+    const myGoals = goals.filter(g => g.team === me.name || g.team === (team.displayName ?? team.name));
+    const oppGoals = goals.filter(g => g.team === opp.name);
+    const allGoals = goals; // fallback if name matching is off
+
+    const bullets = isPost && scoresKnown
       ? statBullets(team.abbreviation, opp.abbreviation, myScore, oppScore, won, drew, teamStats)
       : [];
+
+    const scoreColor = isLive ? "text-yellow-400"
+      : won ? "text-emerald-400"
+      : drew ? "text-white/60"
+      : "text-red-400";
 
     return (
       <div className="py-3 border-b border-white/5 last:border-0">
         <div className="flex items-center gap-3">
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${won ? "bg-emerald-400/20 text-emerald-400" : drew ? "bg-white/10 text-white/60" : "bg-red-400/20 text-red-400"}`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${resultBg}`}>
             {resultLabel}
           </div>
           <button
@@ -167,10 +187,25 @@ function ScheduleSection({ team }) {
             <span className="text-sm truncate text-white/80">{opp.name}</span>
           </button>
           {scoresKnown
-            ? <span className={`text-sm font-bold flex-shrink-0 ${won ? "text-emerald-400" : drew ? "text-white/60" : "text-red-400"}`}>{myScore}–{oppScore}</span>
+            ? <span className={`text-sm font-bold flex-shrink-0 ${scoreColor}`}>
+                {myScore}–{oppScore}
+                {isLive && <span className="text-xs font-normal ml-1">{match.clock || match.statusShort}</span>}
+              </span>
             : <span className="text-sm text-white/30 flex-shrink-0">–</span>
           }
         </div>
+
+        {/* Scorers */}
+        {isPost && allGoals.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 pl-9">
+            {allGoals.map((g, i) => (
+              <span key={i} className="text-xs text-white/40">
+                ⚽ {g.player}{g.isPenalty ? " (pen)" : ""} {g.clock}
+              </span>
+            ))}
+          </div>
+        )}
+
         <Bullets items={bullets} />
       </div>
     );
