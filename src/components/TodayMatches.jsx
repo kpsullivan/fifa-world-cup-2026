@@ -61,9 +61,29 @@ function MatchCard({ match }) {
     : isFinal ? (match.statusShort || "Final")
     : localTime(match.isoDate);
 
-  // Group goals by team for display under each side
-  const homeGoals = goals.filter(g => g.team === match.home.name);
-  const awayGoals = goals.filter(g => g.team === match.away.name);
+  // Fuzzy team match (API text names can differ slightly from scoreboard names)
+  function teamSide(goalTeam, teamName) {
+    if (!goalTeam || !teamName) return false;
+    const a = goalTeam.toLowerCase(), b = teamName.toLowerCase();
+    return a === b || a.includes(b) || b.includes(a);
+  }
+
+  // Deduplicate: collapse multiple goals by same player into one entry with all clock times
+  function dedup(list) {
+    const map = {};
+    for (const g of list) {
+      if (!map[g.player]) map[g.player] = { ...g, clocks: [] };
+      map[g.player].clocks.push(g.clock + (g.isPenalty ? " (pen)" : ""));
+    }
+    return Object.values(map);
+  }
+
+  const homeGoals = dedup(goals.filter(g => teamSide(g.team, match.home.name)));
+  const awayGoals = dedup(goals.filter(g => teamSide(g.team, match.away.name)));
+  // Any goal the fuzzy match couldn't place — show in the middle
+  const unknownGoals = dedup(goals.filter(g =>
+    !teamSide(g.team, match.home.name) && !teamSide(g.team, match.away.name)
+  ));
 
   return (
     <div className="bg-white/10 backdrop-blur rounded-2xl p-4 mb-3 border border-white/10">
@@ -98,21 +118,32 @@ function MatchCard({ match }) {
 
       {/* Scorer list shown for live and finished matches */}
       {!isScheduled && goals.length > 0 && (
-        <div className="mt-3 pt-2 border-t border-white/10 flex justify-between gap-2">
-          <div className="flex-1 space-y-0.5">
-            {homeGoals.map((g, i) => (
-              <div key={i} className="text-xs text-white/60">
-                ⚽ {g.player}{g.isPenalty ? " (pen)" : ""} <span className="text-white/35">{g.clock}</span>
-              </div>
-            ))}
+        <div className="mt-3 pt-2 border-t border-white/10">
+          <div className="flex justify-between gap-2">
+            <div className="flex-1 space-y-0.5">
+              {homeGoals.map((g, i) => (
+                <div key={i} className="text-xs text-white/60">
+                  ⚽ {g.player} <span className="text-white/35">{g.clocks.join(", ")}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex-1 space-y-0.5 text-right">
+              {awayGoals.map((g, i) => (
+                <div key={i} className="text-xs text-white/60">
+                  <span className="text-white/35">{g.clocks.join(", ")}</span> {g.player} ⚽
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="flex-1 space-y-0.5 text-right">
-            {awayGoals.map((g, i) => (
-              <div key={i} className="text-xs text-white/60">
-                <span className="text-white/35">{g.clock}</span> {g.player}{g.isPenalty ? " (pen)" : ""} ⚽
-              </div>
-            ))}
-          </div>
+          {unknownGoals.length > 0 && (
+            <div className="mt-0.5 space-y-0.5 text-center">
+              {unknownGoals.map((g, i) => (
+                <div key={i} className="text-xs text-white/60">
+                  ⚽ {g.player} <span className="text-white/35">{g.clocks.join(", ")}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -131,15 +162,11 @@ function DatePicker({ selectedDate, onSelect }) {
     dates.push(localDateStr(d));
   }
 
-  // Center "Today" button in the scroll container on mount
+  // Center "Today" after paint so offsetLeft is correct
   useEffect(() => {
     const btn = todayBtnRef.current;
-    const container = scrollRef.current;
-    if (!btn || !container) return;
-    const btnLeft = btn.offsetLeft;
-    const btnWidth = btn.offsetWidth;
-    const containerWidth = container.offsetWidth;
-    container.scrollLeft = btnLeft - containerWidth / 2 + btnWidth / 2;
+    if (!btn) return;
+    btn.scrollIntoView({ behavior: "auto", inline: "center", block: "nearest" });
   }, []);
 
   const formatLabel = (str) => {
@@ -149,7 +176,7 @@ function DatePicker({ selectedDate, onSelect }) {
   };
 
   return (
-    <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-2 mb-4">
+    <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
       {dates.map(d => (
         <button
           key={d}
