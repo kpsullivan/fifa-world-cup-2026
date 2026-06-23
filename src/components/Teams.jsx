@@ -130,6 +130,21 @@ function ScheduleSection({ team }) {
   const live = matches.filter(m => m.statusState === "in");
   const upcoming = matches.filter(m => m.statusState === "pre");
 
+  function fuzzyMatch(a, b) {
+    if (!a || !b) return false;
+    const al = a.toLowerCase(), bl = b.toLowerCase();
+    return al === bl || al.includes(bl) || bl.includes(al);
+  }
+
+  function dedupGoals(list) {
+    const map = {};
+    for (const g of list) {
+      if (!map[g.player]) map[g.player] = { ...g, clocks: [] };
+      map[g.player].clocks.push(g.clock + (g.isPenalty ? " (pen)" : ""));
+    }
+    return Object.values(map);
+  }
+
   function OpponentRow({ match, isHome }) {
     const me = isHome ? match.home : match.away;
     const opp = isHome ? match.away : match.home;
@@ -145,31 +160,33 @@ function ScheduleSection({ team }) {
       : won ? "bg-emerald-400/20 text-emerald-400"
       : drew ? "bg-white/10 text-white/60"
       : "bg-red-400/20 text-red-400";
-
-    const [summary, setSummary] = useState({ teamStats: {}, goals: [] });
-
-    useEffect(() => {
-      if (!isPost) return;
-      fetchMatchSummary(match.id)
-        .then(setSummary)
-        .catch(() => {});
-    }, [match.id, isPost]);
-
-    const { teamStats, goals } = summary;
-
-    // My team's goals and opponent's goals, labelled for display
-    const myGoals = goals.filter(g => g.team === me.name || g.team === (team.displayName ?? team.name));
-    const oppGoals = goals.filter(g => g.team === opp.name);
-    const allGoals = goals; // fallback if name matching is off
-
-    const bullets = isPost && scoresKnown
-      ? statBullets(team.abbreviation, opp.abbreviation, myScore, oppScore, won, drew, teamStats)
-      : [];
-
     const scoreColor = isLive ? "text-yellow-400"
       : won ? "text-emerald-400"
       : drew ? "text-white/60"
       : "text-red-400";
+
+    const [summary, setSummary] = useState({ teamStats: {}, goals: [] });
+
+    useEffect(() => {
+      if (!isPost && !isLive) return;
+      fetchMatchSummary(match.id)
+        .then(setSummary)
+        .catch(() => {});
+    }, [match.id, isPost, isLive]);
+
+    const { teamStats, goals } = summary;
+
+    // Split goals by side using fuzzy name matching; anything unmatched goes to center
+    const myGoals   = dedupGoals(goals.filter(g => fuzzyMatch(g.team, me.name)));
+    const oppGoals  = dedupGoals(goals.filter(g => fuzzyMatch(g.team, opp.name)));
+    const unknownGoals = dedupGoals(goals.filter(g =>
+      !fuzzyMatch(g.team, me.name) && !fuzzyMatch(g.team, opp.name)
+    ));
+    const hasGoals = goals.length > 0;
+
+    const bullets = isPost && scoresKnown
+      ? statBullets(team.abbreviation, opp.abbreviation, myScore, oppScore, won, drew, teamStats)
+      : [];
 
     return (
       <div className="py-3 border-b border-white/5 last:border-0">
@@ -195,13 +212,23 @@ function ScheduleSection({ team }) {
           }
         </div>
 
-        {/* Scorers */}
-        {isPost && allGoals.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 pl-9">
-            {allGoals.map((g, i) => (
-              <span key={i} className="text-xs text-white/40">
-                ⚽ {g.player}{g.isPenalty ? " (pen)" : ""} {g.clock}
-              </span>
+        {/* Scorers — split me left, opponent right */}
+        {hasGoals && (
+          <div className="mt-1.5 pl-9 space-y-0.5">
+            {myGoals.map((g, i) => (
+              <div key={i} className="text-xs text-white/50">
+                ⚽ {g.player} <span className="text-white/30">{g.clocks.join(", ")}</span>
+              </div>
+            ))}
+            {oppGoals.map((g, i) => (
+              <div key={i} className="text-xs text-white/40 text-right pr-1">
+                <span className="text-white/25">{g.clocks.join(", ")}</span> {g.player} ⚽
+              </div>
+            ))}
+            {unknownGoals.map((g, i) => (
+              <div key={i} className="text-xs text-white/40">
+                ⚽ {g.player} <span className="text-white/25">{g.clocks.join(", ")}</span>
+              </div>
             ))}
           </div>
         )}
