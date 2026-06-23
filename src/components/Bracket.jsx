@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchGroupsForBracket, computeBest3rd } from "../data/api";
+import { fetchGroupsForBracket, computeBest3rd, fetchAllTournamentMatches, computeClinchStatuses } from "../data/api";
 import { teamFacts } from "../data/teamFacts";
 import { useTeamNav } from "../context/TeamNav";
 
@@ -54,12 +54,19 @@ const RIGHT_SEEDS = [
 ];
 
 // ── Compact team row inside a match card ──────────────────────────────────────
-function TeamRow({ team }) {
+// status: "clinched" = green (position locked), "provisional" = yellow (leading but not final), null = TBD
+function TeamRow({ team, status }) {
   const { navigateToTeam } = useTeamNav();
-  // team can be: a real team object, { thirdFrom: "A·B·C" }, or null (TBD winner)
+
+  const rowBg = status === "clinched"
+    ? "bg-emerald-400/15"
+    : status === "provisional"
+    ? "bg-yellow-400/10"
+    : "";
+
   if (!team) {
     return (
-      <div className="flex items-center gap-1.5 px-2 py-1">
+      <div className={`flex items-center gap-1.5 px-2 py-1 ${rowBg}`}>
         <div className="w-4 h-4 rounded-full bg-white/10 flex-shrink-0" />
         <span className="text-xs text-white/25 flex-1 italic">Winner</span>
       </div>
@@ -67,7 +74,7 @@ function TeamRow({ team }) {
   }
   if (team.thirdFrom) {
     return (
-      <div className="flex items-center gap-1.5 px-2 py-1">
+      <div className={`flex items-center gap-1.5 px-2 py-1 ${rowBg}`}>
         <div className="w-4 h-4 rounded-full bg-white/5 border border-dashed border-white/20 flex-shrink-0" />
         <span className="text-[10px] text-white/40 flex-1 leading-tight">
           Best 3rd<br />{team.thirdFrom}
@@ -79,7 +86,7 @@ function TeamRow({ team }) {
   return (
     <button
       onClick={() => navigateToTeam({ id: team.id, displayName: team.name, abbreviation: team.abbreviation, logo: team.logo })}
-      className="flex items-center gap-1.5 px-2 py-1 w-full text-left hover:bg-white/5 transition-colors"
+      className={`flex items-center gap-1.5 px-2 py-1 w-full text-left hover:brightness-125 transition-all ${rowBg}`}
     >
       {team.logo
         ? <img src={team.logo} alt="" className="w-4 h-4 object-contain flex-shrink-0" />
@@ -93,23 +100,14 @@ function TeamRow({ team }) {
 }
 
 // ── Single match card ─────────────────────────────────────────────────────────
-function MatchCard({ homeTeam, awayTeam }) {
-  const homeRank = (homeTeam && !homeTeam.thirdFrom && teamFacts[homeTeam.abbreviation]?.fifaRank) ?? 999;
-  const awayRank = (awayTeam && !awayTeam.thirdFrom && teamFacts[awayTeam.abbreviation]?.fifaRank) ?? 999;
-  const bothKnown = homeTeam && awayTeam && !homeTeam.thirdFrom && !awayTeam.thirdFrom;
-  const favoriteIsHome = homeRank < awayRank;
-
+function MatchCard({ homeTeam, homeStatus, awayTeam, awayStatus }) {
   return (
     <div style={{ width: CARD_W, height: CARD_H }}
       className="rounded-lg border border-white/20 bg-[#0d2044] overflow-hidden"
     >
-      <div className={bothKnown && favoriteIsHome ? "bg-yellow-400/10" : ""}>
-        <TeamRow team={homeTeam} />
-      </div>
+      <TeamRow team={homeTeam} status={homeStatus} />
       <div className="border-t border-white/10" />
-      <div className={bothKnown && !favoriteIsHome ? "bg-yellow-400/10" : ""}>
-        <TeamRow team={awayTeam} />
-      </div>
+      <TeamRow team={awayTeam} status={awayStatus} />
     </div>
   );
 }
@@ -137,8 +135,10 @@ function RoundColumn({ matches, slotH, label }) {
             }}
           >
             <MatchCard
-              homeTeam={m?.home ?? null}
-              awayTeam={m?.away ?? null}
+              homeTeam={m?.home?.team ?? m?.home ?? null}
+              homeStatus={m?.home?.status ?? null}
+              awayTeam={m?.away?.team ?? m?.away ?? null}
+              awayStatus={m?.away?.status ?? null}
             />
           </div>
         ))}
@@ -231,14 +231,15 @@ function FinalConnector({ totalH, side, label }) {
 
 // ── Main Bracket component ────────────────────────────────────────────────────
 export default function Bracket() {
-  const [groupMap, setGroupMap] = useState({});
-  const [best3rd, setBest3rd]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const [groupMap, setGroupMap]       = useState({});
+  const [best3rd, setBest3rd]         = useState([]);
+  const [clinchStatuses, setClinch]   = useState({});
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
 
   useEffect(() => {
-    fetchGroupsForBracket()
-      .then(groups => {
+    Promise.all([fetchGroupsForBracket(), fetchAllTournamentMatches()])
+      .then(([groups, allMatches]) => {
         const map = {};
         groups.forEach(g => {
           map[g.letter] = {};
@@ -246,6 +247,7 @@ export default function Bracket() {
         });
         setGroupMap(map);
         setBest3rd(computeBest3rd(groups));
+        setClinch(computeClinchStatuses(groups, allMatches));
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -265,20 +267,23 @@ export default function Bracket() {
     </div>
   );
 
-  // Resolve seedings into actual team objects
+  // Resolve a slot to { team, status }
   function resolveSlot(slot) {
-    if (!slot) return null; // TBD future round winner
+    if (!slot) return { team: null, status: null };
     if (slot.third) {
-      // Find the best-ranked 3rd-place team whose group appears in the eligible list
       const eligible = slot.third.split("·");
       const match = best3rd.find(t => eligible.includes(t.fromGroup));
-      return match ?? { thirdFrom: slot.third };
+      // best-3rd slot: provisional if resolved (group stage in progress), TBD label if not
+      return match
+        ? { team: match, status: clinchStatuses[match.id] ?? "provisional" }
+        : { team: { thirdFrom: slot.third }, status: null };
     }
-    return groupMap[slot.g]?.[slot.p] ?? null;
+    const team = groupMap[slot.g]?.[slot.p] ?? null;
+    return { team, status: team ? (clinchStatuses[team.id] ?? null) : null };
   }
 
   function resolve(seed) {
-    if (!seed || seed.tbd != null) return seed ?? { tbd: "Best 3rd" };
+    if (!seed) return { home: { team: null, status: null }, away: { team: null, status: null } };
     return {
       home: resolveSlot(seed.home),
       away: resolveSlot(seed.away),
@@ -299,7 +304,7 @@ export default function Bracket() {
       <div className="bg-yellow-400/10 border border-yellow-400/20 rounded-2xl p-3 mb-4">
         <p className="text-yellow-400 font-semibold text-sm">🏆 Road to the Final</p>
         <p className="text-white/50 text-xs mt-0.5">
-          Based on current group standings · Updates live · 🟡 = higher-ranked team
+          🟢 Clinched · 🟡 Provisional · Updates live
         </p>
       </div>
 

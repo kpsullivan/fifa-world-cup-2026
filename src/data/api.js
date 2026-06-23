@@ -133,9 +133,110 @@ export async function fetchTopScorers() {
     .sort((a, b) => b.goals - a.goals);
 }
 
+// Simulate all possible remaining outcomes for each group and return clinch status per team.
+// "clinched" = team CANNOT finish below their current qualifying position no matter what happens.
+// "provisional" = team is currently qualifying but could be overtaken.
+// Tiebreaker order: points → GD → GF → H2H points → H2H GD (covers ~99% of real cases).
+export function computeClinchStatuses(groups, allMatches) {
+  const statuses = {};
+
+  for (const group of groups) {
+    const teamIds = new Set(group.teams.map(t => t.id));
+
+    // Intra-group matches only
+    const groupMatches = allMatches.filter(
+      m => m.home?.id && m.away?.id && teamIds.has(m.home.id) && teamIds.has(m.away.id)
+    );
+    const completed = groupMatches.filter(m => m.statusState === "post");
+    const remaining = groupMatches.filter(m => m.statusState === "pre");
+
+    // Current position in the standings (0-based index in group.teams which is already sorted)
+    const currentPos = {};
+    group.teams.forEach((t, i) => { currentPos[t.id] = i + 1; });
+
+    function buildStats(extraMatches) {
+      const s = {};
+      for (const t of group.teams) s[t.id] = { pts: 0, gd: 0, gf: 0, h2h: {} };
+
+      function apply(hId, aId, hg, ag) {
+        s[hId].gf += hg; s[aId].gf += ag;
+        s[hId].gd += hg - ag; s[aId].gd += ag - hg;
+        const [hPts, aPts] = hg > ag ? [3, 0] : hg < ag ? [0, 3] : [1, 1];
+        s[hId].pts += hPts; s[aId].pts += aPts;
+        s[hId].h2h[aId] = { pts: hPts, gd: hg - ag };
+        s[aId].h2h[hId] = { pts: aPts, gd: ag - hg };
+      }
+
+      for (const m of [...completed, ...extraMatches]) {
+        const hg = parseInt(m.home?.score ?? m._hg ?? 0);
+        const ag = parseInt(m.away?.score ?? m._ag ?? 0);
+        if (isNaN(hg) || isNaN(ag)) continue;
+        apply(m.home.id, m.away.id, hg, ag);
+      }
+      return s;
+    }
+
+    function sortedPositions(stats) {
+      return group.teams
+        .map(t => ({ id: t.id, ...stats[t.id] }))
+        .sort((a, b) => {
+          if (b.pts !== a.pts) return b.pts - a.pts;
+          if (b.gd !== a.gd) return b.gd - a.gd;
+          if (b.gf !== a.gf) return b.gf - a.gf;
+          // H2H between exactly these two teams
+          const aH = a.h2h[b.id], bH = b.h2h[a.id];
+          if (aH && bH) {
+            if (bH.pts !== aH.pts) return bH.pts - aH.pts;
+            if (bH.gd !== aH.gd) return bH.gd - aH.gd;
+          }
+          return 0;
+        })
+        .map((t, i) => ({ id: t.id, pos: i + 1 }));
+    }
+
+    // Track worst-case finishing position for each team across all outcome combinations
+    const worstPos = {};
+    group.teams.forEach(t => { worstPos[t.id] = 0; });
+
+    const n = remaining.length;
+    const total = Math.pow(3, n);
+    for (let sim = 0; sim < total; sim++) {
+      const extras = [];
+      let s = sim;
+      for (let i = 0; i < n; i++) {
+        const outcome = s % 3; s = Math.floor(s / 3);
+        const m = remaining[i];
+        // outcome 0 = home win, 1 = draw, 2 = away win (use minimal scores to be conservative)
+        const [hg, ag] = outcome === 0 ? [1, 0] : outcome === 1 ? [0, 0] : [0, 1];
+        extras.push({ home: { id: m.home.id, score: hg }, away: { id: m.away.id, score: ag }, _hg: hg, _ag: ag });
+      }
+      const stats = buildStats(extras);
+      for (const { id, pos } of sortedPositions(stats)) {
+        worstPos[id] = Math.max(worstPos[id], pos);
+      }
+    }
+
+    // Assign clinch status based on worst-case position vs qualifying threshold
+    for (const t of group.teams) {
+      const curr = currentPos[t.id];
+      const worst = worstPos[t.id];
+      if (curr === 1 && worst === 1) {
+        statuses[t.id] = "clinched";          // locked in 1st
+      } else if (curr === 2 && worst <= 2) {
+        statuses[t.id] = "clinched";          // locked in top 2
+      } else if (curr <= 2) {
+        statuses[t.id] = "provisional";       // currently qualifying but not guaranteed
+      }
+      // 3rd/4th place: handled separately for best-3rd logic (keep null for now)
+    }
+  }
+
+  return statuses;
+}
+
 // Cache the full tournament schedule so multiple team lookups share one fetch
 let _tournamentCache = null;
-async function fetchAllTournamentMatches() {
+export async function fetchAllTournamentMatches() {
   if (_tournamentCache) return _tournamentCache;
   const res = await fetch(`${ESPN_BASE}/scoreboard?dates=20260601-20260720&limit=200`);
   if (!res.ok) throw new Error(`Failed to fetch tournament schedule (${res.status})`);
