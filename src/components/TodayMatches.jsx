@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { fetchMatchesByDate } from "../data/api";
+import { useState, useEffect, useRef } from "react";
+import { fetchMatchesByDate, fetchMatchSummary } from "../data/api";
 import { teamFacts } from "../data/teamFacts";
 import { useTeamNav } from "../context/TeamNav";
 
@@ -44,15 +44,26 @@ function MatchCard({ match }) {
   const isLive = match.statusState === "in";
   const isFinal = match.statusState === "post";
   const isScheduled = match.statusState === "pre";
+  const [goals, setGoals] = useState([]);
+
+  useEffect(() => {
+    if (isScheduled) return;
+    fetchMatchSummary(match.id)
+      .then(s => setGoals(s.goals ?? []))
+      .catch(() => {});
+  }, [match.id, isScheduled]);
 
   const statusColor = isLive ? "bg-red-500 animate-pulse"
     : isFinal ? "bg-gray-600"
     : "bg-emerald-700";
 
-  // statusShort returns "42'", "HT", "Final", or "Scheduled" — use clock for live, else statusShort
   const statusLabel = isLive ? `LIVE ${match.clock || match.statusShort || ""}`
     : isFinal ? (match.statusShort || "Final")
     : localTime(match.isoDate);
+
+  // Group goals by team for display under each side
+  const homeGoals = goals.filter(g => g.team === match.home.name);
+  const awayGoals = goals.filter(g => g.team === match.away.name);
 
   return (
     <div className="bg-white/10 backdrop-blur rounded-2xl p-4 mb-3 border border-white/10">
@@ -84,6 +95,26 @@ function MatchCard({ match }) {
 
         <TeamBlock team={match.away} />
       </div>
+
+      {/* Scorer list shown for live and finished matches */}
+      {!isScheduled && goals.length > 0 && (
+        <div className="mt-3 pt-2 border-t border-white/10 flex justify-between gap-2">
+          <div className="flex-1 space-y-0.5">
+            {homeGoals.map((g, i) => (
+              <div key={i} className="text-xs text-white/60">
+                ⚽ {g.player}{g.isPenalty ? " (pen)" : ""} <span className="text-white/35">{g.clock}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex-1 space-y-0.5 text-right">
+            {awayGoals.map((g, i) => (
+              <div key={i} className="text-xs text-white/60">
+                <span className="text-white/35">{g.clock}</span> {g.player}{g.isPenalty ? " (pen)" : ""} ⚽
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -91,12 +122,25 @@ function MatchCard({ match }) {
 function DatePicker({ selectedDate, onSelect }) {
   const today = new Date();
   const todayStr = localDateStr(today);
+  const todayBtnRef = useRef(null);
+  const scrollRef = useRef(null);
   const dates = [];
   for (let i = -5; i <= 10; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     dates.push(localDateStr(d));
   }
+
+  // Center "Today" button in the scroll container on mount
+  useEffect(() => {
+    const btn = todayBtnRef.current;
+    const container = scrollRef.current;
+    if (!btn || !container) return;
+    const btnLeft = btn.offsetLeft;
+    const btnWidth = btn.offsetWidth;
+    const containerWidth = container.offsetWidth;
+    container.scrollLeft = btnLeft - containerWidth / 2 + btnWidth / 2;
+  }, []);
 
   const formatLabel = (str) => {
     if (str === todayStr) return "Today";
@@ -105,10 +149,11 @@ function DatePicker({ selectedDate, onSelect }) {
   };
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+    <div ref={scrollRef} className="flex gap-2 overflow-x-auto pb-2 mb-4">
       {dates.map(d => (
         <button
           key={d}
+          ref={d === todayStr ? todayBtnRef : null}
           onClick={() => onSelect(d)}
           className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
             selectedDate === d
