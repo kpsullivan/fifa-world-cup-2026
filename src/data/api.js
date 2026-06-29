@@ -26,14 +26,13 @@ export const FIFA_NAME_TO_ABBR = {
   "Qatar":"QAT","Panama":"PAN","Uruguay":"URU",
 };
 
-// Fetch the definitive Round of 32 bracket from FIFA's API
+// Fetch all knockout-stage matches from FIFA's API (R32 through Final)
 export async function fetchFIFABracket() {
   const res = await fetch(`${FIFA_API}/calendar/matches?idCompetition=${FIFA_COMPETITION}&idSeason=${FIFA_SEASON}&count=200&language=en`);
   if (!res.ok) throw new Error("Failed to fetch FIFA bracket");
   const data = await res.json();
-  return (data.Results ?? []).filter(m =>
-    m.StageName?.[0]?.Description === "Round of 32"
-  );
+  const KNOCKOUT = new Set(["Round of 32","Round of 16","Quarter-final","Semi-final","Final"]);
+  return (data.Results ?? []).filter(m => KNOCKOUT.has(m.StageName?.[0]?.Description));
 }
 
 // Fetch official Golden Boot top scorers from FIFA's API
