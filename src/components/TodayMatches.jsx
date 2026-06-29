@@ -61,14 +61,7 @@ function MatchCard({ match }) {
     : isFinal ? (match.statusShort || "Final")
     : localTime(match.isoDate);
 
-  // Fuzzy team match (API text names can differ slightly from scoreboard names)
-  function teamSide(goalTeam, teamName) {
-    if (!goalTeam || !teamName) return false;
-    const a = goalTeam.toLowerCase(), b = teamName.toLowerCase();
-    return a === b || a.includes(b) || b.includes(a);
-  }
-
-  // Deduplicate: collapse multiple goals by same player into one entry with all clock times
+  // Use teamAbbr (from roster lookup) to reliably split goals by side
   function dedup(list) {
     const map = {};
     for (const g of list) {
@@ -78,11 +71,10 @@ function MatchCard({ match }) {
     return Object.values(map);
   }
 
-  const homeGoals = dedup(goals.filter(g => teamSide(g.team, match.home.name)));
-  const awayGoals = dedup(goals.filter(g => teamSide(g.team, match.away.name)));
-  // Any goal the fuzzy match couldn't place — show in the middle
+  const homeGoals = dedup(goals.filter(g => g.teamAbbr === match.home.abbreviation));
+  const awayGoals = dedup(goals.filter(g => g.teamAbbr === match.away.abbreviation));
   const unknownGoals = dedup(goals.filter(g =>
-    !teamSide(g.team, match.home.name) && !teamSide(g.team, match.away.name)
+    g.teamAbbr !== match.home.abbreviation && g.teamAbbr !== match.away.abbreviation
   ));
 
   return (

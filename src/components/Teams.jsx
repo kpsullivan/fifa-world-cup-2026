@@ -130,12 +130,6 @@ function ScheduleSection({ team }) {
   const live = matches.filter(m => m.statusState === "in");
   const upcoming = matches.filter(m => m.statusState === "pre");
 
-  function fuzzyMatch(a, b) {
-    if (!a || !b) return false;
-    const al = a.toLowerCase(), bl = b.toLowerCase();
-    return al === bl || al.includes(bl) || bl.includes(al);
-  }
-
   function dedupGoals(list) {
     const map = {};
     for (const g of list) {
@@ -176,11 +170,11 @@ function ScheduleSection({ team }) {
 
     const { teamStats, goals } = summary;
 
-    // Split goals by side using fuzzy name matching; anything unmatched goes to center
-    const myGoals   = dedupGoals(goals.filter(g => fuzzyMatch(g.team, me.name)));
-    const oppGoals  = dedupGoals(goals.filter(g => fuzzyMatch(g.team, opp.name)));
+    // Use teamAbbr (from roster lookup) — reliable even when team name strings differ
+    const myGoals   = dedupGoals(goals.filter(g => g.teamAbbr === me.abbreviation));
+    const oppGoals  = dedupGoals(goals.filter(g => g.teamAbbr === opp.abbreviation));
     const unknownGoals = dedupGoals(goals.filter(g =>
-      !fuzzyMatch(g.team, me.name) && !fuzzyMatch(g.team, opp.name)
+      g.teamAbbr !== me.abbreviation && g.teamAbbr !== opp.abbreviation
     ));
     const hasGoals = goals.length > 0;
 

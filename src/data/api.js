@@ -72,6 +72,7 @@ export async function fetchMatchSummary(eventId) {
   if (!res.ok) throw new Error(`Summary unavailable (${res.status})`);
   const data = await res.json();
 
+  // Build team stat map keyed by abbreviation
   const teamStats = {};
   for (const t of data.boxscore?.teams ?? []) {
     const abbr = t.team?.abbreviation;
@@ -80,23 +81,46 @@ export async function fetchMatchSummary(eventId) {
     teamStats[abbr] = s;
   }
 
+  // Build athlete_id → team abbreviation from rosters (avoids text name mismatches like
+  // "Korea Republic" in keyEvent text vs "South Korea" from scoreboard)
+  const athleteTeam = {};
+  for (const r of data.rosters ?? []) {
+    const abbr = r.team?.abbreviation;
+    for (const a of r.roster ?? []) {
+      const id = a.athlete?.id;
+      if (id) athleteTeam[String(id)] = abbr;
+    }
+  }
+
+  // Also build abbreviation → displayName from rosters for scorer display
+  const abbrToName = {};
+  for (const r of data.rosters ?? []) {
+    if (r.team?.abbreviation) abbrToName[r.team.abbreviation] = r.team.displayName ?? r.team.abbreviation;
+  }
+
   const goals = [];
   for (const event of data.keyEvents ?? []) {
     const type = event.type?.type;
     if (!["goal", "penalty-goal", "own-goal"].includes(type)) continue;
-    const player = event.participants?.[0]?.athlete;
-    // Team name appears in parentheses: "Julián Quiñones (Mexico) right footed..."
-    const teamMatch = event.text?.match(/\(([^)]+)\)/);
+    const athlete = event.participants?.[0]?.athlete;
+    const athleteId = String(athlete?.id ?? "");
+    // Prefer roster lookup; fall back to text parsing only if roster lookup fails
+    let teamAbbr = athleteTeam[athleteId] ?? null;
+    if (!teamAbbr) {
+      const textMatch = event.text?.match(/\(([^)]+)\)/);
+      teamAbbr = textMatch?.[1] ?? "";
+    }
     goals.push({
-      player: player?.displayName ?? "?",
-      team: teamMatch?.[1] ?? "",
+      player: athlete?.displayName ?? "?",
+      athleteId,
+      teamAbbr,                                // e.g. "KOR" — reliable via roster lookup
       clock: event.clock?.displayValue ?? "",
       isOwnGoal: type === "own-goal",
       isPenalty: type === "penalty-goal",
     });
   }
 
-  return { teamStats, goals };
+  return { teamStats, goals, athleteTeam, abbrToName };
 }
 
 export async function fetchTopScorers() {
@@ -114,15 +138,22 @@ export async function fetchTopScorers() {
     completed.map(m => fetchMatchSummary(m.id))
   );
 
+  // Build abbreviation → {logo, name} from match data
+  const abbrMap = {};
+  for (const m of completed) {
+    if (m.home.abbreviation) abbrMap[m.home.abbreviation] = { logo: m.home.logo, name: m.home.name };
+    if (m.away.abbreviation) abbrMap[m.away.abbreviation] = { logo: m.away.logo, name: m.away.name };
+  }
+
   const tally = {};
   for (const r of results) {
     if (r.status !== "fulfilled") continue;
     for (const goal of r.value.goals ?? []) {
       if (goal.isOwnGoal) continue;
       const key = goal.player;
+      const info = abbrMap[goal.teamAbbr] ?? {};
       if (!tally[key]) {
-        const info = teamMap[goal.team] ?? {};
-        tally[key] = { name: goal.player, team: goal.team, abbreviation: info.abbreviation ?? "", logo: info.logo ?? null, goals: 0 };
+        tally[key] = { name: goal.player, abbreviation: goal.teamAbbr ?? "", team: info.name ?? goal.teamAbbr ?? "", logo: info.logo ?? null, goals: 0 };
       }
       tally[key].goals++;
     }

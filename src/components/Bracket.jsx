@@ -34,6 +34,7 @@ const LEFT_SEEDS = [
 ];
 
 // Right half feeds → R16 M91/M92 → QF M99, and R16 M95/M96 → QF M100 → SF M102
+// Order verified against live FIFA.com bracket (top-to-bottom): M76,M78,M79,M80 then M86,M88,M85,M87
 const RIGHT_SEEDS = [
   // M76: Winner C  vs Runner-up F
   { home: { g: "C", p: 1 }, away: { g: "F", p: 2 } },
@@ -43,14 +44,14 @@ const RIGHT_SEEDS = [
   { home: { g: "A", p: 1 }, away: { third: "C·E·F·H·I" } },
   // M80: Winner L  vs Best 3rd from E,H,I,J,K
   { home: { g: "L", p: 1 }, away: { third: "E·H·I·J·K" } },
-  // M85: Winner B  vs Best 3rd from E,F,G,I,J
-  { home: { g: "B", p: 1 }, away: { third: "E·F·G·I·J" } },
   // M86: Winner J  vs Runner-up H
   { home: { g: "J", p: 1 }, away: { g: "H", p: 2 } },
-  // M87: Winner K  vs Best 3rd from D,E,I,J,L
-  { home: { g: "K", p: 1 }, away: { third: "D·E·I·J·L" } },
   // M88: Runner-up D vs Runner-up G
   { home: { g: "D", p: 2 }, away: { g: "G", p: 2 } },
+  // M85: Winner B  vs Best 3rd from E,F,G,I,J
+  { home: { g: "B", p: 1 }, away: { third: "E·F·G·I·J" } },
+  // M87: Winner K  vs Best 3rd from D,E,I,J,L
+  { home: { g: "K", p: 1 }, away: { third: "D·E·I·J·L" } },
 ];
 
 // ── Compact team row inside a match card ──────────────────────────────────────
@@ -135,9 +136,9 @@ function RoundColumn({ matches, slotH, label }) {
             }}
           >
             <MatchCard
-              homeTeam={m?.home?.team ?? m?.home ?? null}
+              homeTeam={m?.home?.team ?? null}
               homeStatus={m?.home?.status ?? null}
-              awayTeam={m?.away?.team ?? m?.away ?? null}
+              awayTeam={m?.away?.team ?? null}
               awayStatus={m?.away?.status ?? null}
             />
           </div>
