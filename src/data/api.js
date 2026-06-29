@@ -2,6 +2,48 @@
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world";
 const ESPN_V2_BASE = "https://site.api.espn.com/apis/v2/sports/soccer/fifa.world";
 
+// FIFA public API — CORS open, authoritative source for bracket and scorers
+const FIFA_API = "https://api.fifa.com/api/v3";
+const FIFA_COMPETITION = "17";
+const FIFA_SEASON = "285023"; // 2026 WC season ID
+
+// Maps FIFA team names → ESPN abbreviation (for logo lookups) — exported for Bracket
+export const FIFA_NAME_TO_ABBR = {
+  "South Africa":"RSA","Canada":"CAN","Brazil":"BRA","Japan":"JPN",
+  "Germany":"GER","Paraguay":"PAR","Netherlands":"NED","Morocco":"MAR",
+  "Côte d'Ivoire":"CIV","Ivory Coast":"CIV","Norway":"NOR",
+  "France":"FRA","Sweden":"SWE","Mexico":"MEX","Ecuador":"ECU",
+  "England":"ENG","Congo DR":"COD","Congo":"COD","Belgium":"BEL",
+  "Senegal":"SEN","United States":"USA","USA":"USA",
+  "Bosnia and Herzegovina":"BIH","Spain":"ESP","Austria":"AUT",
+  "Portugal":"POR","Croatia":"CRO","Switzerland":"SUI","Algeria":"ALG",
+  "Australia":"AUS","Egypt":"EGY","Argentina":"ARG",
+  "Cabo Verde":"CPV","Cape Verde":"CPV","Colombia":"COL","Ghana":"GHA",
+  "Korea Republic":"KOR","South Korea":"KOR","Czechia":"CZE",
+  "Saudi Arabia":"KSA","Curaçao":"CUW","Scotland":"SCO","Haiti":"HAI",
+  "Türkiye":"TUR","Turkey":"TUR","Tunisia":"TUN","Iran":"IRN",
+  "New Zealand":"NZL","Iraq":"IRQ","Jordan":"JOR","Uzbekistan":"UZB",
+  "Qatar":"QAT","Panama":"PAN","Uruguay":"URU",
+};
+
+// Fetch the definitive Round of 32 bracket from FIFA's API
+export async function fetchFIFABracket() {
+  const res = await fetch(`${FIFA_API}/calendar/matches?idCompetition=${FIFA_COMPETITION}&idSeason=${FIFA_SEASON}&count=200&language=en`);
+  if (!res.ok) throw new Error("Failed to fetch FIFA bracket");
+  const data = await res.json();
+  return (data.Results ?? []).filter(m =>
+    m.StageName?.[0]?.Description === "Round of 32"
+  );
+}
+
+// Fetch official Golden Boot top scorers from FIFA's API
+export async function fetchFIFAScorers() {
+  const res = await fetch(`${FIFA_API}/topscorers?idCompetition=${FIFA_COMPETITION}&idSeason=${FIFA_SEASON}&language=en`);
+  if (!res.ok) throw new Error("Failed to fetch FIFA scorers");
+  const data = await res.json();
+  return data.Results ?? [];
+}
+
 // Given the groups array from fetchGroupsForBracket or fetchStandings,
 // returns the 8 best 3rd-place teams sorted by points → GD → GF,
 // each annotated with which group they came from.
